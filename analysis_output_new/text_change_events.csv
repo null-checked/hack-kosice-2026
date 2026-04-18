@@ -1,0 +1,12 @@
+timestamp,session_id,document_uri,change_count,inserted_length,removed_length,duration_ms,inserted_text,removed_text,inserted_text_preview,removed_text_preview,inserted_text_truncated,removed_text_truncated
+2026-04-18T11:53:00.213000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,2,1,1,201, , , , ,False,False
+2026-04-18T11:53:05.311000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,13,12,1,1630,hello world , ,hello world , ,False,False
+2026-04-18T11:53:08.252000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,9,0,15,2015,,"dlrowhello  #
+",,dlrowhello  #\r\n,False,False
+2026-04-18T11:53:09.846000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,1,20,0,0,print(math.sqrt(25)),,print(math.sqrt(25)),,False,False
+2026-04-18T11:53:10.594000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,1,2,0,0,"
+",,\r\n,,False,False
+2026-04-18T11:53:13.698000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,1,1,0,0,a,,a,,False,False
+2026-04-18T11:53:14.723000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test.py,1,0,1,0,,a,,a,False,False
+2026-04-18T11:53:29.999000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test2.py,4,4,0,376,hell,,hell,,False,False
+2026-04-18T11:53:30.820000+00:00,820fab68-8f34-4ff1-a73e-98b73ef9a691,file:///d%3A/Desktop/test_code_track/test2.py,1,0,4,0,,hell,,hell,False,False

@@ -1,0 +1,2 @@
+session_id,events,text_events,cursor_events,inserted_length,removed_length,net_length,start,end,duration_seconds
+fce42106-2ab0-43eb-bd0c-7c5bffd85dc1,69,35,27,33671,19,33652,2026-04-18T11:31:32.510000+00:00,2026-04-18T11:32:58.141000+00:00,85

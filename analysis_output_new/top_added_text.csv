@@ -1,0 +1,8 @@
+text,text_preview,count,text_length,total_characters
+ , ,1,1,1
+hello world ,hello world ,1,12,12
+print(math.sqrt(25)),print(math.sqrt(25)),1,20,20
+"
+",\r\n,1,2,2
+a,a,1,1,1
+hell,hell,1,4,4

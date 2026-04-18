@@ -1,0 +1,5 @@
+document_uri,language,events,text_events,cursor_events,inserted_length,removed_length,net_length,sessions
+file:///d%3A/Desktop/test_code_track/.metrics/events.ndjson,jsonl,39,27,9,33615,0,33615,1
+file:///d%3A/Desktop/test_code_track/test.py,python,27,8,18,56,19,37,1
+file:///d%3A/Desktop/test_code_track/test.python,plaintext,2,0,0,0,0,0,1
+<no-document>,unknown,1,0,0,0,0,0,1

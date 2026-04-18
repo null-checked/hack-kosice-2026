@@ -1,0 +1,2 @@
+session_id,events,text_events,cursor_events,inserted_length,removed_length,net_length,start,end,duration_seconds
+820fab68-8f34-4ff1-a73e-98b73ef9a691,38,9,26,40,22,18,2026-04-18T11:52:58.734000+00:00,2026-04-18T11:55:23.077000+00:00,144

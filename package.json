@@ -1,0 +1,92 @@
+{
+  "name": "vscode-metrics-tracker",
+  "displayName": "Metrics Tracker",
+  "description": "Tracks editing metrics (written text, removed text, cursor positions) and writes them to a local file.",
+  "version": "0.0.1",
+  "publisher": "null-checked",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:metricsTracker.openMetricsFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "metricsTracker.openMetricsFile",
+        "title": "Metrics Tracker: Open Metrics File"
+      }
+    ],
+    "configuration": {
+      "title": "Metrics Tracker",
+      "properties": {
+        "metricsTracker.outputFile": {
+          "type": "string",
+          "default": ".metrics/events.ndjson",
+          "description": "Output file for metrics events. Relative paths resolve from the first workspace folder."
+        },
+        "metricsTracker.captureRawText": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, inserted and removed text are recorded in full."
+        },
+        "metricsTracker.captureCursorSelections": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, cursor and selection movement is recorded."
+        },
+        "metricsTracker.excludeOutputFileFromTracking": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, the configured metrics output file is excluded from tracking to prevent recursive logging."
+        },
+        "metricsTracker.maxEvents": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 10,
+          "description": "Maximum number of recent events persisted to the metrics file. Older events are discarded."
+        },
+        "metricsTracker.writerFlushIntervalMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 50,
+          "description": "How often buffered metrics are flushed to disk."
+        },
+        "metricsTracker.textChangeDebounceMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 25,
+          "description": "Text changes are aggregated and logged once typing pauses for this many milliseconds."
+        },
+        "metricsTracker.cursorDebounceMs": {
+          "type": "number",
+          "default": 300,
+          "minimum": 25,
+          "description": "Cursor/selection changes are logged after this idle period to avoid high-frequency noise."
+        },
+        "metricsTracker.maxRawTextChars": {
+          "type": "number",
+          "default": 400,
+          "minimum": 0,
+          "description": "Maximum inserted/removed raw text characters stored per aggregated text-change event."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "echo \"No lint configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.8.3"
+  }
+}

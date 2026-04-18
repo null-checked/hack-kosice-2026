@@ -1,0 +1,13 @@
+metric,value
+total_events,69
+parse_errors,0
+start_time,2026-04-18T11:31:32.510000+00:00
+end_time,2026-04-18T11:32:58.141000+00:00
+duration_seconds,85
+events_per_minute,48.347
+avg_event_size_bytes,782.20
+estimated_mb_per_hour,2.164
+unique_sessions,1
+unique_documents,4
+self_tracking_events,39
+self_tracking_ratio,0.5652
