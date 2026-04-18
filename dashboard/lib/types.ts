@@ -93,3 +93,57 @@ export interface BackendHealth {
   llm_model?: string;
   llm_available?: boolean;
 }
+
+/**
+ * Chat DTOs mirroring `backend/src/models/api.py` and the Kotlin plugin.
+ * The dashboard does not render chat edits in v1; types live here for
+ * completeness and to keep the three-tier DTO contract in sync.
+ */
+
+/** A file @-mentioned by the user for additional chat context. */
+export interface ContextFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * A structured code edit proposed by the assistant in a chat response.
+ * `file_path` is redacted (project-relative); `diff_unified` is computed
+ * backend-side via difflib. `start_line`/`end_line` are 1-based, inclusive;
+ * both null means the edit targets the whole file.
+ */
+export interface CodeEdit {
+  file_path: string;
+  original_code: string;
+  proposed_code: string;
+  explanation?: string;
+  start_line?: number | null;
+  end_line?: number | null;
+  diff_unified?: string;
+}
+
+/** Single turn in the /code-chat conversation. */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+  /** Assistant-side structured edits; empty for user turns. */
+  edits?: CodeEdit[];
+}
+
+export interface CodeChatRequest {
+  conversation?: ChatTurn[];
+  current_code?: string;
+  file_path?: string | null;
+  language?: string;
+  /** Files @-mentioned by the user for additional context. */
+  context_files?: ContextFile[];
+  /** When true, the system prompt asks the LLM for structured edits. */
+  allow_edits?: boolean;
+}
+
+export interface CodeChatResponse {
+  answer: string;
+  model?: string;
+  /** Structured edits proposed by the assistant (empty when `allow_edits` was false). */
+  edits?: CodeEdit[];
+}

@@ -105,6 +105,25 @@ class SocraticResponse(BaseModel):
     confidence: float = 0.7
 
 
+class CodeEdit(BaseModel):
+    """A structured code edit proposed by the assistant in a chat response.
+
+    `file_path` is redacted (project-relative); `diff_unified` is computed
+    backend-side via difflib. `start_line`/`end_line` are 1-based, inclusive;
+    both ``None`` means the edit targets the whole file.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    original_code: str
+    proposed_code: str
+    explanation: str = ""
+    start_line: int | None = None
+    end_line: int | None = None
+    diff_unified: str = ""
+
+
 class ChatTurn(BaseModel):
     """A single turn in the /code-chat conversation. Uses the standard LLM
     `user`/`assistant` vocabulary (not Socratic `coach`/`developer`) because
@@ -114,6 +133,10 @@ class ChatTurn(BaseModel):
 
     role: Literal["user", "assistant"]
     text: str
+    # Populated from the assistant response for local plugin-side rendering.
+    # Still serialized to the backend, but the backend ignores `edits` on
+    # inbound `ChatTurn`. Default empty for user turns.
+    edits: list[CodeEdit] = Field(default_factory=list)
 
 
 class CodeChatRequest(BaseModel):
@@ -125,6 +148,10 @@ class CodeChatRequest(BaseModel):
     current_code: str = ""
     file_path: str | None = None
     language: str = "python"
+    # Files @-mentioned by the user for additional context.
+    context_files: list[ContextFile] = Field(default_factory=list)
+    # When true, the system prompt asks the LLM for structured edits.
+    allow_edits: bool = False
 
 
 class CodeChatResponse(BaseModel):
@@ -132,6 +159,8 @@ class CodeChatResponse(BaseModel):
 
     answer: str
     model: str = "unknown"
+    # Structured edits proposed by the assistant (empty when `allow_edits` was false).
+    edits: list[CodeEdit] = Field(default_factory=list)
 
 
 class CompleteRequest(BaseModel):

@@ -36,8 +36,15 @@ class BaseLLMClient(ABC):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        json_mode: bool = False,
     ) -> str:
-        """Return the raw text completion."""
+        """Return the raw text completion.
+
+        When ``json_mode`` is True, request provider-enforced JSON output if the
+        backend supports it. Callers must still defensively parse the result —
+        providers that don't support the flag just ignore it and rely on the
+        system prompt to ask for JSON.
+        """
 
     @abstractmethod
     async def available(self) -> bool:
@@ -69,6 +76,7 @@ class OllamaClient(BaseLLMClient):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        json_mode: bool = False,
     ) -> str:
         body: dict[str, Any] = {
             "model": self.model,
@@ -78,6 +86,10 @@ class OllamaClient(BaseLLMClient):
         }
         if system:
             body["system"] = system
+        if json_mode:
+            # Ollama's /api/generate accepts `format: "json"` to constrain
+            # output to valid JSON.
+            body["format"] = "json"
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/api/generate", json=body)
             r.raise_for_status()
@@ -112,23 +124,52 @@ class OpenAICompatibleClient(BaseLLMClient):
             logger.debug("OpenAI-compatible unreachable: %s", exc)
             return False
 
+    def _uses_max_completion_tokens(self) -> bool:
+        """True for OpenAI models that require ``max_completion_tokens``.
+
+        Covers the GPT-5 family (gpt-5, gpt-5.1, gpt-5.2, gpt-5.4, …) and the
+        o-series reasoning models (o1, o3, o4-mini, …). Older models — gpt-4*,
+        gpt-3.5-* — still use ``max_tokens``.
+        """
+        m = self.model.lower().lstrip("ft:")  # allow fine-tuned variants
+        return (
+            m.startswith("gpt-5")
+            or m.startswith("o1")
+            or m.startswith("o3")
+            or m.startswith("o4")
+        )
+
     async def complete(
         self,
         prompt: str,
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        json_mode: bool = False,
     ) -> str:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+        # OpenAI's GPT-5 family and the o-series reasoning models replaced
+        # ``max_tokens`` with ``max_completion_tokens`` and return 400 when
+        # the old param is used. Older models (gpt-4*, 3.5*) still accept
+        # only ``max_tokens``. Detect by model-name prefix and pick the
+        # right key — same numeric value either way.
+        if self._uses_max_completion_tokens():
+            body["max_completion_tokens"] = max_tokens
+        else:
+            body["max_tokens"] = max_tokens
+        if json_mode:
+            # OpenAI and most compatible providers (LM Studio, vLLM, Groq,
+            # Together) accept ``response_format={"type": "json_object"}`` to
+            # force valid JSON output.
+            body["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(
@@ -179,6 +220,7 @@ class UnavailableLLMClient(BaseLLMClient):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        json_mode: bool = False,
     ) -> str:
         raise LLMUnavailableError(
             f"No LLM provider configured. Reason: {self.reason}"
@@ -211,12 +253,19 @@ class FallbackLLMClient(BaseLLMClient):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        json_mode: bool = False,
     ) -> str:
         last_err: Exception | None = None
         for client in self.chain:
             try:
                 logger.debug("Trying LLM provider %s (%s)", client.name, client.model)
-                return await client.complete(prompt, system, temperature, max_tokens)
+                return await client.complete(
+                    prompt,
+                    system,
+                    temperature,
+                    max_tokens,
+                    json_mode=json_mode,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("LLM provider %s failed: %s", client.name, exc)
                 last_err = exc

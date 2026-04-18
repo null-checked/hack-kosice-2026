@@ -200,10 +200,49 @@ Current file contents:
 {current_code}
 ```
 
+{context_block}
 Conversation so far:
 {conversation}
 
 Answer the developer's most recent question directly."""
+
+
+# When ``allow_edits`` is true, we replace CODE_CHAT_SYSTEM with this prompt
+# and expect a JSON object back. The JSON schema is inlined on purpose —
+# keeping it in the system prompt lets every LLM (including Ollama, which
+# has no structured-output flag beyond ``format: "json"``) see it.
+CODE_CHAT_EDITS_SYSTEM = """You are a helpful coding assistant embedded in the developer's IDE.
+The developer will paste the source file they're currently looking at and ask
+questions or request changes.
+
+Return a single JSON object with EXACTLY these fields and nothing else:
+  - "answer": string — prose explanation of the change (or a plain answer
+    when no code change is warranted). May reference line numbers. Never
+    include raw code fences here — put proposed code in ``edits`` instead.
+  - "edits":  array of CodeEdit objects. Empty when the user is only asking
+    a question. Populate it only when the user is clearly asking to change
+    code.
+
+Each CodeEdit has the shape:
+  {
+    "file_path":     string — MUST match either the request's `file_path`
+                     field or one of the attached context files' `path`.
+    "original_code": string — the exact snippet you are replacing (or the
+                     full file contents if rewriting the file).
+    "proposed_code": string — the replacement snippet.
+    "explanation":   string — short rationale for this edit.
+    "start_line":    int|null — 1-based first line of the replacement, or
+                     null to target the whole file.
+    "end_line":      int|null — 1-based last line (inclusive), or null.
+  }
+
+Rules:
+- No markdown fences. No prose outside the JSON object.
+- Never invent APIs, function names, or libraries that aren't visible.
+- If the developer is only asking a question (not requesting a change),
+  return ``"edits": []`` and put the answer in ``"answer"``.
+- ``diff_unified`` is computed server-side; do NOT set it.
+"""
 
 
 def build_code_chat_prompt(
@@ -212,12 +251,19 @@ def build_code_chat_prompt(
     current_code: str,
     file_path: str | None,
     conversation: list,
+    context_files: list[tuple[str, str]] | None = None,
+    allow_edits: bool = False,
 ) -> tuple[str, str]:
     """Return (system, user) for /code-chat.
 
     `conversation` is a list of objects with `.role` + `.text` (or dict-like
     counterparts). The most recent turn should be a `user` question that the
     assistant needs to answer.
+
+    When ``context_files`` is non-empty, render each one as a labeled code
+    block before the conversation turn (mirrors ``build_tests_prompt``).
+    When ``allow_edits`` is True, swap the system prompt for the
+    structured-output variant that asks the LLM for a JSON envelope.
     """
     rendered: list[str] = []
     for turn in conversation:
@@ -231,10 +277,22 @@ def build_code_chat_prompt(
             rendered.append(f"Developer: {text}")
         elif role == "assistant":
             rendered.append(f"Assistant: {text}")
+
+    if context_files:
+        ctx = "\n\n".join(
+            f"Context file {p}:\n```{language or 'text'}\n{c}\n```"
+            for p, c in context_files
+        )
+        context_block = f"Additional context files:\n{ctx}\n\n"
+    else:
+        context_block = ""
+
     user = CODE_CHAT_USER_TEMPLATE.format(
         language=language or "text",
         file_path=file_path or "<unsaved>",
         current_code=current_code or "<empty file>",
+        context_block=context_block,
         conversation="\n".join(rendered) or "(no prior turns)",
     )
-    return CODE_CHAT_SYSTEM, user
+    system = CODE_CHAT_EDITS_SYSTEM if allow_edits else CODE_CHAT_SYSTEM
+    return system, user

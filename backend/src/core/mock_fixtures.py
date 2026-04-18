@@ -6,6 +6,12 @@ demo is guaranteed to work even if Ollama is unreachable.
 
 from __future__ import annotations
 
+import difflib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.models.api import CodeChatRequest, CodeChatResponse
+
 # --- Pillar 1: Generate Tests for fizzbuzz ---
 FIZZBUZZ_TEST_CODE = '''import pytest
 from fizz import fizzbuzz
@@ -71,8 +77,6 @@ ANALYZE_ORIGINAL = '''def analyze(xs):
 
 
 def _mock_unified_diff() -> str:
-    import difflib
-
     diff = difflib.unified_diff(
         ANALYZE_ORIGINAL.splitlines(keepends=True),
         ANALYZE_REFACTORED.splitlines(keepends=True),
@@ -364,3 +368,78 @@ def pick_completion_mock(prefix: str) -> str:
         if tail.startswith(key):
             return value
     return MOCK_COMPLETION_DEFAULT
+
+
+# --- /code-chat with allow_edits=True ----------------------------------------
+# Canonical demo: "rename foo to bar" on a one-line function. Keeps the DEMO
+# path honest without depending on an actual LLM. When ``allow_edits`` is
+# false, we preserve the v0.3 behavior: prose answer, empty edits.
+
+_MOCK_EDIT_FALLBACK_ORIGINAL = "def foo():\n    return 1\n"
+_MOCK_EDIT_FALLBACK_PROPOSED = "def bar():\n    return 1\n"
+
+
+def mock_code_chat_response(
+    req: "CodeChatRequest", prose_answer: str
+) -> "CodeChatResponse":
+    """Build the DEMO_MOCK=1 response for /code-chat.
+
+    - ``allow_edits=False``: preserve v0.3 behavior — plain prose, empty edits.
+    - ``allow_edits=True``: return one canned ``CodeEdit`` derived from the
+      request's ``current_code`` (or the first context file) with a real
+      server-computed unified diff. The prose answer describes the edit.
+    """
+    # Local import to avoid a circular module load (mock_fixtures is imported
+    # by code_chat, which imports models.api — pydantic is fast but we keep
+    # the top of this module stdlib-only).
+    from src.models.api import CodeChatResponse, CodeEdit
+
+    if not req.allow_edits:
+        return CodeChatResponse(answer=prose_answer, model="mock")
+
+    # Pick a source snippet to base the mock edit on. Priority: request
+    # ``current_code`` → first ``context_files`` entry → fallback to the
+    # canonical ``def foo(): return 1`` snippet.
+    if req.current_code.strip():
+        original = req.current_code
+        file_path = req.file_path or "demo/snippet.py"
+    elif req.context_files:
+        first = req.context_files[0]
+        original = first.content
+        file_path = first.path
+    else:
+        original = _MOCK_EDIT_FALLBACK_ORIGINAL
+        file_path = req.file_path or "demo/snippet.py"
+
+    # Produce a deterministic rewrite: rename the first ``foo`` identifier to
+    # ``bar`` if present; otherwise append a trailing comment so the diff is
+    # visibly non-empty. Either way the edit is self-consistent.
+    if "foo" in original:
+        proposed = original.replace("foo", "bar", 1)
+        explanation = "Renamed the identifier `foo` to `bar` at the first occurrence."
+    else:
+        proposed = original.rstrip() + "\n# edited by mock_code_chat_response\n"
+        explanation = "Appended a trailing marker comment so the diff is non-empty."
+
+    diff = "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            proposed.splitlines(keepends=True),
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+            n=3,
+        )
+    )
+    edit = CodeEdit(
+        file_path=file_path,
+        original_code=original,
+        proposed_code=proposed,
+        explanation=explanation,
+        start_line=1,
+        end_line=max(1, len(original.splitlines())),
+        diff_unified=diff,
+    )
+    answer = (
+        "Here's a canned edit for the DEMO_MOCK path. " + explanation
+    )
+    return CodeChatResponse(answer=answer, model="mock", edits=[edit])

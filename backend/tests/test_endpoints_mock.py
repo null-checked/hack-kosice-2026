@@ -187,6 +187,89 @@ async def test_code_chat_returns_non_empty_answer(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_code_chat_back_compat_without_allow_edits(client: AsyncClient) -> None:
+    """A minimal /code-chat request (no context_files, no allow_edits) must
+    still return a prose answer and an empty edits array — preserving v0.3
+    contract for existing callers."""
+    resp = await client.post(
+        "/api/v1/code-chat",
+        json={
+            "conversation": [
+                {"role": "user", "text": "What does this do?"},
+            ],
+            "current_code": "def greet(name):\n    return f'hello, {name}'\n",
+            "language": "python",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["answer"].strip(), "empty answer"
+    # Contract: absent allow_edits, edits must be an empty list.
+    assert body.get("edits") == [], f"expected empty edits, got {body.get('edits')!r}"
+
+
+@pytest.mark.asyncio
+async def test_code_chat_with_allow_edits_returns_canned_edit(
+    client: AsyncClient,
+) -> None:
+    """With ``allow_edits=true`` and a ``foo``-bearing ``current_code``, the
+    DEMO_MOCK path returns a single CodeEdit with a real unified diff."""
+    resp = await client.post(
+        "/api/v1/code-chat",
+        json={
+            "conversation": [
+                {"role": "user", "text": "rename foo to bar"},
+            ],
+            "current_code": "def foo():\n    return 1\n",
+            "file_path": "demo/snippet.py",
+            "language": "python",
+            "allow_edits": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["answer"].strip(), "empty answer"
+    edits = body.get("edits") or []
+    assert len(edits) >= 1, f"expected at least one edit, got {edits!r}"
+    edit = edits[0]
+    for required in ("file_path", "original_code", "proposed_code", "diff_unified"):
+        assert required in edit, f"edit missing {required!r}: {edit}"
+        assert edit[required], f"edit.{required} is empty: {edit[required]!r}"
+    # The canned mock renames `foo` → `bar`.
+    assert "foo" in edit["original_code"]
+    assert "bar" in edit["proposed_code"]
+    # The diff must be a real unified diff (has the `---`/`+++` headers).
+    assert edit["diff_unified"].startswith("---"), edit["diff_unified"][:60]
+
+
+@pytest.mark.asyncio
+async def test_code_chat_with_context_files(client: AsyncClient) -> None:
+    """A /code-chat request carrying ``context_files`` must succeed and return
+    a valid CodeChatResponse (the prompt wiring should not blow up)."""
+    resp = await client.post(
+        "/api/v1/code-chat",
+        json={
+            "conversation": [
+                {"role": "user", "text": "Does the helper cover this case?"},
+            ],
+            "current_code": "def caller():\n    return help()\n",
+            "file_path": "demo/caller.py",
+            "language": "python",
+            "context_files": [
+                {"path": "src/helper.py", "content": "def help():\n    return 1\n"},
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Shape guarantees from CodeChatResponse.
+    for required in ("answer", "model", "edits"):
+        assert required in body, f"missing {required!r}: {body}"
+    assert body["answer"].strip(), "empty answer"
+    assert isinstance(body["edits"], list)
+
+
+@pytest.mark.asyncio
 async def test_socratic_question_returns_followup_after_reply(
     client: AsyncClient,
 ) -> None:

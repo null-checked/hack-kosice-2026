@@ -96,11 +96,34 @@ data class CompleteResponse(
     val model: String = "unknown",
 )
 
+/**
+ * A structured code edit proposed by the assistant in a chat response.
+ * `file_path` is redacted (project-relative); `diff_unified` is computed
+ * backend-side via difflib. `start_line`/`end_line` are 1-based, inclusive;
+ * both null means the edit targets the whole file.
+ */
+@Serializable
+data class CodeEdit(
+    val file_path: String,
+    val original_code: String,
+    val proposed_code: String,
+    val explanation: String = "",
+    val start_line: Int? = null,
+    val end_line: Int? = null,
+    val diff_unified: String = "",
+)
+
 /** Single turn in the /code-chat conversation. Role = "user" | "assistant". */
 @Serializable
 data class ChatTurn(
     val role: String,
     val text: String,
+    /**
+     * Populated from the assistant response for local plugin-side rendering.
+     * Still serialized to the backend, but the backend ignores `edits` on
+     * inbound `ChatTurn`. Default empty for user turns.
+     */
+    val edits: List<CodeEdit> = emptyList(),
 )
 
 @Serializable
@@ -109,12 +132,18 @@ data class CodeChatRequest(
     val current_code: String = "",
     val file_path: String? = null,
     val language: String = "python",
+    /** Files @-mentioned by the user for additional context. */
+    val context_files: List<ContextFile> = emptyList(),
+    /** When true, the system prompt asks the LLM for structured edits. */
+    val allow_edits: Boolean = false,
 )
 
 @Serializable
 data class CodeChatResponse(
     val answer: String,
     val model: String = "unknown",
+    /** Structured edits proposed by the assistant (empty when `allow_edits` was false). */
+    val edits: List<CodeEdit> = emptyList(),
 )
 
 @Serializable

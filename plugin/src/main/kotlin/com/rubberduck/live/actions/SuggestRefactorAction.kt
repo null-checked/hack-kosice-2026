@@ -1,20 +1,15 @@
 package com.rubberduck.live.actions
 
-import com.intellij.diff.DiffContentFactory
-import com.intellij.diff.DiffManager
-import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.DialogWrapper
 import com.rubberduck.live.detector.EventEmitter
 import com.rubberduck.live.intervention.SocraticNotifier
 import com.rubberduck.live.model.EventType
@@ -23,10 +18,9 @@ import com.rubberduck.live.model.SuggestRefactorRequest
 import com.rubberduck.live.model.SuggestRefactorResponse
 import com.rubberduck.live.net.BackendClient
 import com.rubberduck.live.settings.RubberDuckSettings
+import com.rubberduck.live.util.DiffApplier
 import com.rubberduck.live.util.PathRedactor
-import java.awt.Dimension
 import java.util.UUID
-import javax.swing.JComponent
 
 /**
  * Right-click action: send the current file (or selection) to
@@ -124,59 +118,39 @@ class SuggestRefactorAction : AnAction() {
         } else {
             "RubberDuck refactor — $fileName\n$smellSummary"
         }
-        val factory = DiffContentFactory.getInstance()
-        val before = factory.create(project, originalCode)
-        val after = factory.create(project, response.refactored_code)
-        val diffRequest = SimpleDiffRequest(titleWithSmells, before, after, "Original", "Suggested")
 
-        val dialog = object : DialogWrapper(project, true) {
-            private val diffPanel = DiffManager.getInstance()
-                .createRequestPanel(project, disposable, null)
-                .also { it.setRequest(diffRequest) }
-
-            init {
-                title = "Apply RubberDuck refactor?"
-                setOKButtonText("Apply")
-                setCancelButtonText("Cancel")
-                init()
-            }
-
-            override fun createCenterPanel(): JComponent =
-                diffPanel.component.apply { preferredSize = Dimension(960, 560) }
-        }
-
-        val applied = dialog.showAndGet()
-
-        if (applied) {
-            WriteCommandAction.runWriteCommandAction(
-                project,
-                "RubberDuck: Apply refactor",
-                null,
-                { document.setText(response.refactored_code) },
-            )
-            SocraticNotifier.showInfo(
-                project,
-                "✅ Refactor applied",
-                smellSummary.ifBlank { "The suggested refactor has been written to the file. Ctrl+Z to revert." },
-            )
-            EventEmitter.emit(
-                EventType.INTERVENTION_ACCEPTED,
-                file = redactedFile,
-                payload = EventEmitter.json(
-                    "intervention_id" to interventionId,
-                    "kind" to "refactor",
-                ),
-            )
-        } else {
-            EventEmitter.emit(
-                EventType.INTERVENTION_DISMISSED,
-                file = redactedFile,
-                payload = EventEmitter.json(
-                    "intervention_id" to interventionId,
-                    "kind" to "refactor",
-                ),
-            )
-        }
+        DiffApplier.previewAndApply(
+            project = project,
+            document = document,
+            title = titleWithSmells,
+            original = originalCode,
+            proposed = response.refactored_code,
+            onApplied = {
+                SocraticNotifier.showInfo(
+                    project,
+                    "✅ Refactor applied",
+                    smellSummary.ifBlank { "The suggested refactor has been written to the file. Ctrl+Z to revert." },
+                )
+                EventEmitter.emit(
+                    EventType.INTERVENTION_ACCEPTED,
+                    file = redactedFile,
+                    payload = EventEmitter.json(
+                        "intervention_id" to interventionId,
+                        "kind" to "refactor",
+                    ),
+                )
+            },
+            onDismissed = {
+                EventEmitter.emit(
+                    EventType.INTERVENTION_DISMISSED,
+                    file = redactedFile,
+                    payload = EventEmitter.json(
+                        "intervention_id" to interventionId,
+                        "kind" to "refactor",
+                    ),
+                )
+            },
+        )
     }
 
     private fun languageFor(ext: String?): String = when (ext?.lowercase()) {
