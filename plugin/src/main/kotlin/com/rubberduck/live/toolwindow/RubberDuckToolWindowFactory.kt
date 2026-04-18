@@ -10,13 +10,11 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
-import com.rubberduck.live.detector.EventBus
 import com.rubberduck.live.detector.EventEmitter
 import com.rubberduck.live.detector.SessionContext
 import com.rubberduck.live.model.ChatTurn
 import com.rubberduck.live.model.CodeChatRequest
 import com.rubberduck.live.model.ContextFile
-import com.rubberduck.live.model.DeveloperEvent
 import com.rubberduck.live.model.EventType
 import com.rubberduck.live.net.BackendClient
 import com.rubberduck.live.net.EventsWebSocket
@@ -29,7 +27,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -38,15 +35,11 @@ import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.GridLayout
 import java.awt.Rectangle
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
-import javax.swing.DefaultListModel
 import javax.swing.JButton
-import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.Scrollable
 
@@ -87,7 +80,6 @@ object RubberDuckToolWindow {
     private const val MAX_TOTAL_CONTEXT_BYTES = 256L * 1024
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val eventsModel = DefaultListModel<String>()
     /** Single compact breadcrumb at the top of the tab: llm + session + mode. */
     private val breadcrumb = JBLabel("<html>&middot; connecting…</html>")
 
@@ -139,7 +131,6 @@ object RubberDuckToolWindow {
     )
     private val conversation: MutableList<ChatTurn> = mutableListOf()
 
-    private val tsFmt = SimpleDateFormat("HH:mm:ss")
     private val currentProject = AtomicReference<Project?>()
     @Volatile private var sessionResolver: SessionFileResolver? = null
     @Volatile private var atMentionController: AtMentionController? = null
@@ -188,17 +179,12 @@ object RubberDuckToolWindow {
         clearButton.addActionListener { clearConversation() }
         updateInputEnablement()
 
-        // -- Collapsed "Recent events" strip at the bottom for diagnostics ---
-        val events = JPanel(BorderLayout())
-        events.border = BorderFactory.createTitledBorder("Recent events")
-        val list = JList(eventsModel)
-        val scroll = JBScrollPane(list)
-        scroll.preferredSize = Dimension(260, 110)
-        events.add(scroll, BorderLayout.CENTER)
-
+        // The event stream used to show up here as a titled "Recent events"
+        // strip for diagnostics; removed in v0.4 because the dashboard tab
+        // already surfaces the same feed and the duplicate column was just
+        // crowding the chat panel.
         root.add(breadcrumbBar, BorderLayout.NORTH)
         root.add(chat, BorderLayout.CENTER)
-        root.add(events, BorderLayout.SOUTH)
 
         initializeTranscript(project, resolver)
         startBackgroundUpdaters()
@@ -206,18 +192,7 @@ object RubberDuckToolWindow {
     }
 
     private fun startBackgroundUpdaters() {
-        scope.launch {
-            EventBus.getInstance().events.collect { ev -> appendEvent(ev) }
-        }
         scope.launch { healthLoop() }
-    }
-
-    private fun appendEvent(ev: DeveloperEvent) {
-        val label = "${tsFmt.format(Date(ev.ts))}  ${ev.type}  ${ev.file ?: "-"}"
-        ApplicationManager.getApplication().invokeLater {
-            eventsModel.addElement(label)
-            while (eventsModel.size() > 20) eventsModel.remove(0)
-        }
     }
 
     private suspend fun healthLoop() {

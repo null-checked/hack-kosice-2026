@@ -73,7 +73,7 @@ internal fun htmlEscape(s: String): String = s
  * rendered as literal `` ` ``. Inline code takes precedence over bold /
  * italic, so `` `**not bold**` `` stays as code.
  */
-internal fun renderMarkdown(text: String): String {
+internal fun renderMarkdown(text: String, project: com.intellij.openapi.project.Project? = null): String {
     val sb = StringBuilder()
     val lines = text.lines()
     val fenceOpen = Regex("^\\s*```\\s*([A-Za-z0-9_+\\-]*)\\s*$")
@@ -85,7 +85,9 @@ internal fun renderMarkdown(text: String): String {
     while (i < lines.size) {
         val line = lines[i]
 
-        if (fenceOpen.matches(line)) {
+        val fenceMatch = fenceOpen.matchEntire(line)
+        if (fenceMatch != null) {
+            val language = fenceMatch.groupValues[1].takeIf { it.isNotBlank() }
             val body = StringBuilder()
             i++
             while (i < lines.size && !fenceClose.matches(lines[i])) {
@@ -94,7 +96,7 @@ internal fun renderMarkdown(text: String): String {
                 i++
             }
             if (i < lines.size) i++  // consume closing fence
-            sb.append(renderCodeBlock(body.toString()))
+            sb.append(renderCodeBlock(body.toString(), language, project))
             continue
         }
 
@@ -173,16 +175,30 @@ private fun isBulletLine(line: String): Boolean {
  * Render a fenced-code body as a `<pre>` block. Newlines are converted to
  * `<br/>` so the whole block stays one HTMLEditorKit paragraph — otherwise
  * the `border` is drawn only around the first line.
+ *
+ * When [language] maps to a registered [SyntaxHighlighter] (and the user's
+ * IDE has a matching plugin installed — Java/Kotlin always work, Python or
+ * JS/TS require the relevant language plugin), tokens are coloured via
+ * [CodeHighlighter] using the editor's current colour scheme. Otherwise
+ * the body is rendered as plain escaped text. The `<pre>` itself uses the
+ * editor scheme's default background / foreground so code blocks match
+ * whatever theme the developer is running.
  */
-private fun renderCodeBlock(body: String): String {
-    val escaped = htmlEscape(body).replace("\n", "<br/>")
+private fun renderCodeBlock(
+    body: String,
+    language: String?,
+    project: com.intellij.openapi.project.Project?,
+): String {
+    val bg = CodeHighlighter.hex(CodeHighlighter.editorBackground())
+    val fg = CodeHighlighter.hex(CodeHighlighter.editorForeground())
+    val inner = CodeHighlighter.highlightToHtml(body, language, project)
     return "<pre style=\"" +
-        "background-color: #111827; color: #E5E7EB; " +
+        "background-color: $bg; color: $fg; " +
         "padding: 8px 10px; margin: 4px 0; " +
         "font-family: monospace; font-size: 10px; " +
         "border: 1px solid #374151; " +
         "white-space: pre-wrap;" +
-        "\">" + escaped + "</pre>"
+        "\">" + inner + "</pre>"
 }
 
 /**
@@ -311,13 +327,13 @@ class AssistantMessageComponent(
         isOpaque = false
         border = BorderFactory.createEmptyBorder(2, 0, 2, 0)
 
-        val icon = "&#129428;"   // 🦆
+        val icon = "&#129414;"   // 🦆 U+1F986 DUCK (NOT U+1F994 hedgehog)
         val html = buildString {
             append("<html><body style='font-family: sans-serif; font-size: 11px;'>")
             append("<div style='margin: 4px 0; padding: 6px 8px; ")
             append("background: ").append(ASSIST_BG).append("; ")
             append("border-left: 3px solid ").append(ASSIST_ACCENT).append(";'>")
-            append(icon).append(' ').append(renderMarkdown(text))
+            append(icon).append(' ').append(renderMarkdown(text, project))
             append("</div></body></html>")
         }
         val pane = bubblePane(html).apply {
