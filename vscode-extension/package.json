@@ -76,9 +76,10 @@
     },
     "views": {
       "rubberduck-live": [
-        { "id": "rubberduck.chat",     "name": "Chat",         "type": "webview" },
-        { "id": "rubberduck.events",   "name": "Recent Events" },
-        { "id": "rubberduck.socratic", "name": "Socratic Feed" }
+        { "id": "rubberduck.chat",      "name": "Chat",         "type": "webview" },
+        { "id": "rubberduck.dashboard", "name": "Dashboard",    "type": "webview" },
+        { "id": "rubberduck.events",    "name": "Recent Events" },
+        { "id": "rubberduck.socratic",  "name": "Socratic Feed" }
       ]
     }
   },

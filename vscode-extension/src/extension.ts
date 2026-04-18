@@ -17,7 +17,7 @@ import { registerStatusBarItem } from './ui/statusBarItem';
 import { EventsViewProvider } from './ui/eventsViewProvider';
 import { SocraticViewProvider } from './ui/socraticViewProvider';
 import { registerChatWebviewProvider } from './ui/chatWebviewProvider';
-import { registerShowDashboardCommand } from './ui/dashboardWebviewProvider';
+import { registerDashboardViewProvider, registerShowDashboardCommand } from './ui/dashboardWebviewProvider';
 import { registerInlineCompletionProvider } from './completion/inlineCompletionProvider';
 
 /**
@@ -64,6 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('rubberduck.socratic', socraticView),
   );
   registerChatWebviewProvider(context);
+  registerDashboardViewProvider(context);
 
   // 6) Inline completion (ghost text).
   registerInlineCompletionProvider(context);

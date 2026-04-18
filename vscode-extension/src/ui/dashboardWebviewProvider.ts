@@ -27,6 +27,39 @@ export function registerShowDashboardCommand(context: vscode.ExtensionContext): 
   log.info('rubberDuck.showDashboard command registered');
 }
 
+/**
+ * Sidebar tab version — lives next to the Chat tab under the RubberDuck
+ * activity-bar container. Smaller than the full-panel view but always on
+ * screen. Re-renders when the dashboard URL changes in settings.
+ */
+export class DashboardViewProvider implements vscode.WebviewViewProvider {
+  public static readonly VIEW_TYPE = 'rubberduck.dashboard';
+  private view: vscode.WebviewView | undefined;
+
+  resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ): void {
+    this.view = webviewView;
+    webviewView.webview.options = { enableScripts: true, localResourceRoots: [] };
+    webviewView.webview.html = renderHtml(Config.dashboardUrl);
+  }
+
+  refresh(): void {
+    if (this.view) this.view.webview.html = renderHtml(Config.dashboardUrl);
+  }
+}
+
+export function registerDashboardViewProvider(context: vscode.ExtensionContext): void {
+  const provider = new DashboardViewProvider();
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(DashboardViewProvider.VIEW_TYPE, provider),
+    Config.onDidChange(() => provider.refresh()),
+  );
+  log.info('DashboardViewProvider registered');
+}
+
 function openDashboardPanel(): void {
   const dashboardUrl = Config.dashboardUrl;
 

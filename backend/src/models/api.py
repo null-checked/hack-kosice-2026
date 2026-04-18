@@ -155,6 +155,26 @@ class CompleteResponse(BaseModel):
     model: str = "unknown"
 
 
+class ExplainCodeRequest(BaseModel):
+    """Ask the duck to explain a chunk of legacy / unfamiliar code."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    code: str
+    file_path: str | None = None
+    language: str = "text"
+    context: str = ""
+
+
+class ExplainCodeResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    explanation: str
+    complexity: str = "unknown"
+    suggestions: list[str] = Field(default_factory=list)
+    model: str = "unknown"
+
+
 class ErrorEnvelope(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

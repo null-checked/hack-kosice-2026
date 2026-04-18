@@ -8,6 +8,7 @@ from src.api.v1.endpoints import (
     code_chat,
     complete,
     events_ws,
+    explain_code,
     generate_tests,
     health,
     socratic,
@@ -21,4 +22,5 @@ api_v1_router.include_router(suggest_refactor.router)
 api_v1_router.include_router(socratic.router)
 api_v1_router.include_router(complete.router)
 api_v1_router.include_router(code_chat.router)
+api_v1_router.include_router(explain_code.router)
 api_v1_router.include_router(events_ws.router)
