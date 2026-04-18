@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.v1.router import api_v1_router
-from src.core.llm_client import create_llm_client
+from src.core.llm_client import MockLLMClient, create_llm_client
 from src.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,15 @@ async def lifespan(app: FastAPI):
     # and returns an UnavailableLLMClient if nothing is configurable), so the
     # backend always boots — DEMO_MOCK=1 and /health continue to work even
     # when no API key is set.
-    llm_client = create_llm_client(settings)
+    # Under DEMO_MOCK=1 we want the NEW streaming /api/v1/chat endpoint to
+    # work end-to-end without a real key. Legacy feature modules still
+    # short-circuit on their own via `demo_mock=...` branches, so installing
+    # a MockLLMClient here is purely additive for the chat path.
+    if settings.DEMO_MOCK:
+        llm_client = MockLLMClient()
+        logger.info("DEMO_MOCK=1 → using MockLLMClient for streaming chat.")
+    else:
+        llm_client = create_llm_client(settings)
 
     # Probe LLM at startup (non-blocking best effort).
     try:

@@ -77,6 +77,37 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
         // actually reliable — an off-by-default toggle made users conclude
         // the feature didn't exist. Opt-out in Settings → Tools → RubberDuck.
         var enableInlineCompletion: Boolean = true
+        // Phase 9.C — markdown-based Skills system. Project-scoped skills
+        // live under `$projectDir/<skillsDirectory>/<skill>/SKILL.md` and
+        // are loaded at runtime by `SkillsLoader`. `enabledSkills` stores
+        // the skill `name:` frontmatter field for each skill the user has
+        // toggled on in Settings → Tools → RubberDuck Live — Skills.
+        var skillsDirectory: String = ".skills"
+        var enabledSkills: MutableSet<String> = mutableSetOf(
+            "Test Generator",
+            "Refactor Suggester",
+            "Code Explainer",
+            "Socratic Coach",
+        )
+
+        // Phase 4 — embedded chat tool window. The JCEF-hosted web UI
+        // reads these via the `window.rubberduck.getConfig()` /
+        // `listModels()` bridge methods; the full Configurable UX
+        // lands in Step 7, but the fields exist here now so Step 6 can
+        // already wire context builders against them without a schema
+        // bump.
+        var chatEnabled: Boolean = true
+        var chatModel: String = "gpt-4o-mini"
+        var chatAvailableModels: MutableList<String> = mutableListOf(
+            "gpt-4o-mini",
+            "gpt-4o",
+            "claude-3-5-sonnet-20241022",
+            "llama3.1:8b",
+            "qwen2.5-coder:7b",
+        )
+        var chatMaxHistoryTokens: Int = 8000
+        var chatAttachOpenFiles: Boolean = false
+        var chatAttachDiagnostics: Boolean = false
     }
 
     private var state = State()
