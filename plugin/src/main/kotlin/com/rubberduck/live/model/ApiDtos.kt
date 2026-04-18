@@ -47,11 +47,20 @@ data class SuggestRefactorResponse(
     val reasoning: String,
 )
 
+/** One turn in the ongoing Socratic dialogue. Role: "coach" or "developer". */
+@Serializable
+data class SocraticTurn(
+    val role: String,
+    val text: String,
+)
+
 @Serializable
 data class SocraticRequest(
     val recent_events: List<DeveloperEvent> = emptyList(),
     val current_code: String = "",
     val stuck_reason: String = "unknown",
+    /** Empty on the opening call; non-empty when the user is replying mid-dialogue. */
+    val conversation: List<SocraticTurn> = emptyList(),
 )
 
 @Serializable
@@ -69,4 +78,41 @@ data class HealthResponse(
     val llm_available: Boolean = false,
     val demo_mock: Boolean = false,
     val version: String = "0.0.0",
+)
+
+@Serializable
+data class CompleteRequest(
+    val language: String = "python",
+    val prefix: String,
+    val suffix: String = "",
+    val file_path: String? = null,
+    val max_tokens: Int = 96,
+)
+
+@Serializable
+data class CompleteResponse(
+    val completion: String,
+    val stop_reason: String = "eol",
+    val model: String = "unknown",
+)
+
+/** Single turn in the /code-chat conversation. Role = "user" | "assistant". */
+@Serializable
+data class ChatTurn(
+    val role: String,
+    val text: String,
+)
+
+@Serializable
+data class CodeChatRequest(
+    val conversation: List<ChatTurn> = emptyList(),
+    val current_code: String = "",
+    val file_path: String? = null,
+    val language: String = "python",
+)
+
+@Serializable
+data class CodeChatResponse(
+    val answer: String,
+    val model: String = "unknown",
 )

@@ -4,12 +4,15 @@
 SHELL := /bin/bash
 ROOT  := $(shell pwd)
 
-# Plugin Gradle build requires JDK 21 (IntelliJ Platform 2024.2). If a
-# JDK 21 is available via /usr/libexec/java_home, export JAVA_HOME for
-# all plugin targets. System-wide Java (e.g. 25) stays untouched.
+# Plugin Gradle build requires JDK 21 (IntelliJ Platform 2024.2). On macOS we
+# auto-locate it via /usr/libexec/java_home so system-wide Java (e.g. 25) stays
+# untouched. On Linux and Windows, the user is expected to set JAVA_HOME
+# themselves (standard practice).
+ifeq ($(shell uname 2>/dev/null),Darwin)
 PLUGIN_JAVA_HOME := $(shell /usr/libexec/java_home -v 21 2>/dev/null)
 ifneq ($(PLUGIN_JAVA_HOME),)
 export JAVA_HOME := $(PLUGIN_JAVA_HOME)
+endif
 endif
 
 # Colours (fallback to no-op on dumb terminals).
@@ -103,21 +106,21 @@ check: check-backend check-dashboard check-plugin
 	@printf "\n$(C_GREEN)✓ check: ALL PASSED$(C_RESET)\n"
 
 check-backend:
-	@printf "$(C_BOLD)[1/3] backend · py_compile$(C_RESET)\n"
-	@python3 -m py_compile $$(find backend/src -name '*.py') && printf "$(C_GREEN)    ✓ backend clean$(C_RESET)\n"
+	@printf "$(C_BOLD)[1/3] backend · py_compile + pytest$(C_RESET)\n"
+	@python3 -m py_compile $$(find backend/src -name '*.py') && printf "$(C_GREEN)    ✓ backend py_compile$(C_RESET)\n"
+	@cd backend && uv run --group dev pytest -q && printf "$(C_GREEN)    ✓ backend pytest$(C_RESET)\n"
 
 check-dashboard:
 	@printf "$(C_BOLD)[2/3] dashboard · tsc + next build$(C_RESET)\n"
 	@cd dashboard && npx --no-install tsc --noEmit && npm run build >/dev/null 2>&1 && printf "$(C_GREEN)    ✓ dashboard clean$(C_RESET)\n"
 
 check-plugin:
-	@printf "$(C_BOLD)[3/3] plugin · gradle buildPlugin$(C_RESET)\n"
-	@cd plugin && ./gradlew -q buildPlugin && printf "$(C_GREEN)    ✓ plugin zip built$(C_RESET)\n"
+	@printf "$(C_BOLD)[3/3] plugin · gradle buildPlugin + test$(C_RESET)\n"
+	@cd plugin && ./gradlew -q buildPlugin test && printf "$(C_GREEN)    ✓ plugin built + tests$(C_RESET)\n"
 
-## stop — free demo ports
+## stop — free demo ports (cross-platform via scripts/kill_port.py)
 stop:
-	@-lsof -ti:8765 | xargs -r kill 2>/dev/null || true
-	@-lsof -ti:3000 | xargs -r kill 2>/dev/null || true
+	@python scripts/kill_port.py 8765 3000
 	@printf "$(C_GREEN)✓ stopped$(C_RESET)\n"
 
 ## clean — wipe build artefacts

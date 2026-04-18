@@ -29,9 +29,9 @@ printf "%s🦆 RubberDuck Live dev%s  mode=%s%s%s\n" \
 printf "%sbackend:%s http://127.0.0.1:8765   %sdashboard:%s http://localhost:3000\n\n" \
   "$c_be" "$c_reset" "$c_da" "$c_reset"
 
-# Port guard.
+# Port guard (cross-platform via scripts/kill_port.py --check).
 for p in 8765 3000; do
-  if lsof -ti:$p >/dev/null 2>&1; then
+  if python scripts/kill_port.py --check $p; then
     printf "%s✗%s port %s already in use. Run \`make stop\` first.\n" \
       "$c_warn" "$c_reset" "$p"
     exit 1

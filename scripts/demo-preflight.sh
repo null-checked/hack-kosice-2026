@@ -86,11 +86,11 @@ else
     bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
 fi
 
-# 4. Port 8765 free
-check "Port 8765 free for backend" bash -c '! lsof -ti:8765 >/dev/null 2>&1'
+# 4. Port 8765 free (cross-platform via scripts/kill_port.py --check).
+check "Port 8765 free for backend" bash -c '! python scripts/kill_port.py --check 8765'
 
 # 5. Port 3000 free
-check "Port 3000 free for dashboard" bash -c '! lsof -ti:3000 >/dev/null 2>&1'
+check "Port 3000 free for dashboard" bash -c '! python scripts/kill_port.py --check 3000'
 
 # 6. Plugin zip present
 check "Plugin zip built (plugin/build/distributions/*.zip)" \

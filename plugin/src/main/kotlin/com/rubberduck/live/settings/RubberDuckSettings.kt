@@ -25,7 +25,7 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
 
     /** DTO holding the actual persisted fields. */
     class State {
-        var backendUrl: String = "http://127.0.0.1:8765"
+        var backendUrl: String = "http://127.0.0.1:8766"
         var sendEventsToDashboard: Boolean = true
         var interventionFrequency: InterventionFrequency = InterventionFrequency.NORMAL
         var privacyMode: Boolean = false
@@ -33,6 +33,10 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
         // Displayed in the settings panel as read-only diagnostics.
         var lastSeenLlmProvider: String = ""
         var lastSeenLlmModel: String = ""
+        // Inline completion (Tier C). ON by default now that the feature is
+        // actually reliable — an off-by-default toggle made users conclude
+        // the feature didn't exist. Opt-out in Settings → Tools → RubberDuck.
+        var enableInlineCompletion: Boolean = true
     }
 
     private var state = State()

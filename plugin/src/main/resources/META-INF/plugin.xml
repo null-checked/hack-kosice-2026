@@ -56,6 +56,10 @@
                                  id="com.rubberduck.live.settings"
                                  displayName="RubberDuck Live"
                                  instance="com.rubberduck.live.settings.RubberDuckConfigurable"/>
+
+        <!-- Inline completion (Tier C) -->
+        <inline.completion.provider
+            implementation="com.rubberduck.live.completion.RubberDuckInlineCompletionProvider"/>
     </extensions>
 
     <actions>

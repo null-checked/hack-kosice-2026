@@ -14,7 +14,8 @@ export type EventType =
   | "STUCK_DETECTED"
   | "INTERVENTION_SHOWN"
   | "INTERVENTION_ACCEPTED"
-  | "INTERVENTION_DISMISSED";
+  | "INTERVENTION_DISMISSED"
+  | "INSPECTION";
 
 export const ALL_EVENT_TYPES: readonly EventType[] = [
   "EDIT",
@@ -27,6 +28,7 @@ export const ALL_EVENT_TYPES: readonly EventType[] = [
   "INTERVENTION_SHOWN",
   "INTERVENTION_ACCEPTED",
   "INTERVENTION_DISMISSED",
+  "INSPECTION",
 ] as const;
 
 /** Free-form payload blob; individual components narrow with safe accessors. */

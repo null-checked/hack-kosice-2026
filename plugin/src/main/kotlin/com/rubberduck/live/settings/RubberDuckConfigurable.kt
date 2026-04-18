@@ -29,6 +29,7 @@ class RubberDuckConfigurable : Configurable {
     private val sendEventsBox = JBCheckBox("Send events to dashboard")
     private val frequencyBox = ComboBox(InterventionFrequency.values())
     private val privacyBox = JBCheckBox("Strict privacy: never send code off-device")
+    private val inlineCompletionBox = JBCheckBox("Enable inline completion (ghost text after a pause)")
     private val demoMockLabel = JBLabel("")
     private val providerLabel = JBLabel("")
     private val connectionStatus = JBLabel(" ")
@@ -45,6 +46,7 @@ class RubberDuckConfigurable : Configurable {
             .addComponent(sendEventsBox, 1)
             .addLabeledComponent("Intervention frequency:", frequencyBox, 1, false)
             .addComponent(privacyBox, 1)
+            .addComponent(inlineCompletionBox, 1)
             .addSeparator()
             .addLabeledComponent("LLM provider/model:", providerLabel, 1, false)
             .addLabeledComponent("Backend DEMO_MOCK:", demoMockLabel, 1, false)
@@ -61,7 +63,8 @@ class RubberDuckConfigurable : Configurable {
         return backendUrlField.text.trim() != s.backendUrl ||
             sendEventsBox.isSelected != s.sendEventsToDashboard ||
             (frequencyBox.selectedItem as InterventionFrequency) != s.interventionFrequency ||
-            privacyBox.isSelected != s.privacyMode
+            privacyBox.isSelected != s.privacyMode ||
+            inlineCompletionBox.isSelected != s.enableInlineCompletion
     }
 
     override fun apply() {
@@ -70,6 +73,7 @@ class RubberDuckConfigurable : Configurable {
         s.sendEventsToDashboard = sendEventsBox.isSelected
         s.interventionFrequency = frequencyBox.selectedItem as InterventionFrequency
         s.privacyMode = privacyBox.isSelected
+        s.enableInlineCompletion = inlineCompletionBox.isSelected
     }
 
     override fun reset() {
@@ -78,6 +82,7 @@ class RubberDuckConfigurable : Configurable {
         sendEventsBox.isSelected = s.sendEventsToDashboard
         frequencyBox.selectedItem = s.interventionFrequency
         privacyBox.isSelected = s.privacyMode
+        inlineCompletionBox.isSelected = s.enableInlineCompletion
         providerLabel.text = if (s.lastSeenLlmProvider.isNotEmpty())
             "${s.lastSeenLlmProvider} / ${s.lastSeenLlmModel}" else "(not probed yet)"
         demoMockLabel.text = if (s.demoMockDisplay) "ON" else "off"

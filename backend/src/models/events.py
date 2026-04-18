@@ -21,6 +21,10 @@ class EventType(str, Enum):
     INTERVENTION_SHOWN = "INTERVENTION_SHOWN"
     INTERVENTION_ACCEPTED = "INTERVENTION_ACCEPTED"
     INTERVENTION_DISMISSED = "INTERVENTION_DISMISSED"
+    # Local inspection (com.intellij.localInspection / DaemonCodeAnalyzer)
+    # fires a red-squiggly or warning. Plugin emits one event per NEW issue;
+    # repeats of the same (file, line, severity, description) are deduped.
+    INSPECTION = "INSPECTION"
 
 
 class DeveloperEvent(BaseModel):

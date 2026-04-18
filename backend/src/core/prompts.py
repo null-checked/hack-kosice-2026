@@ -147,3 +147,73 @@ def build_socratic_prompt(
         current_code=current_code or "<no code supplied>",
     )
     return SOCRATIC_SYSTEM, user
+
+
+# ---------- /code-chat ----------
+#
+# The /code-chat endpoint powers the tool-window chat panel AFTER the
+# Socratic/chat UX split (v0.3). Unlike the Socratic coach, this assistant
+# is DIRECT: it answers the developer's question about their current file.
+
+CODE_CHAT_SYSTEM = """You are a helpful coding assistant embedded in the developer's IDE.
+The developer will paste the source file they're currently looking at and ask
+questions about it.
+
+Rules:
+- Answer directly and concisely. Aim for ≤ 5 short sentences unless the
+  question clearly asks for more.
+- When referring to specific code, quote the line number (e.g. "line 14").
+- Never invent APIs, function names, or libraries that aren't visible in
+  the supplied code.
+- If you don't know, say "I'm not sure — here's what I can see…" and state
+  what the code actually does.
+- Plain prose only. No JSON wrapper, no markdown code fences around the
+  answer itself (short inline `snippets` are fine).
+"""
+
+CODE_CHAT_USER_TEMPLATE = """Language: {language}
+File: {file_path}
+
+Current file contents:
+```{language}
+{current_code}
+```
+
+Conversation so far:
+{conversation}
+
+Answer the developer's most recent question directly."""
+
+
+def build_code_chat_prompt(
+    *,
+    language: str,
+    current_code: str,
+    file_path: str | None,
+    conversation: list,
+) -> tuple[str, str]:
+    """Return (system, user) for /code-chat.
+
+    `conversation` is a list of objects with `.role` + `.text` (or dict-like
+    counterparts). The most recent turn should be a `user` question that the
+    assistant needs to answer.
+    """
+    rendered: list[str] = []
+    for turn in conversation:
+        role = getattr(turn, "role", None) or (
+            turn.get("role") if isinstance(turn, dict) else None
+        )
+        text = getattr(turn, "text", None) or (
+            turn.get("text") if isinstance(turn, dict) else ""
+        )
+        if role == "user":
+            rendered.append(f"Developer: {text}")
+        elif role == "assistant":
+            rendered.append(f"Assistant: {text}")
+    user = CODE_CHAT_USER_TEMPLATE.format(
+        language=language or "text",
+        file_path=file_path or "<unsaved>",
+        current_code=current_code or "<empty file>",
+        conversation="\n".join(rendered) or "(no prior turns)",
+    )
+    return CODE_CHAT_SYSTEM, user
