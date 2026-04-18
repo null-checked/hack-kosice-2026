@@ -39,3 +39,8 @@ plugin/out/
 # ---- Misc runtime ----
 *.log
 /tmp/
+file.py
+# Scratch files the sandbox IDE wrote while manually testing plugin actions.
+test_fizz.py
+# Claude Code local session state.
+.claude/

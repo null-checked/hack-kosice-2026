@@ -9,8 +9,15 @@ import { useEffect, useState } from "react";
 
 import type { BackendHealth } from "@/lib/types";
 
+// Backend HTTP URL is fully configurable via env. Priority:
+//   1. `NEXT_PUBLIC_BACKEND_HTTP_URL` — full override.
+//   2. `NEXT_PUBLIC_BACKEND_HOST` + `NEXT_PUBLIC_BACKEND_PORT` — derive.
+//   3. Fallback to `127.0.0.1:8765`.
+const DEFAULT_BACKEND_HOST = process.env.NEXT_PUBLIC_BACKEND_HOST ?? "127.0.0.1";
+const DEFAULT_BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT ?? "8765";
 const DEFAULT_HTTP_URL =
-    process.env.NEXT_PUBLIC_BACKEND_HTTP_URL ?? "http://127.0.0.1:8765/api/v1";
+    process.env.NEXT_PUBLIC_BACKEND_HTTP_URL ??
+    `http://${DEFAULT_BACKEND_HOST}:${DEFAULT_BACKEND_PORT}/api/v1`;
 const POLL_MS = 10_000;
 
 export interface UseBackendHealthResult {

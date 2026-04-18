@@ -26,9 +26,11 @@ import javax.swing.SwingUtilities
 class RubberDuckConfigurable : Configurable {
 
     private val backendUrlField = JBTextField()
+    private val dashboardUrlField = JBTextField()
     private val sendEventsBox = JBCheckBox("Send events to dashboard")
     private val frequencyBox = ComboBox(InterventionFrequency.values())
     private val privacyBox = JBCheckBox("Strict privacy: never send code off-device")
+    private val inlineCompletionBox = JBCheckBox("Enable inline completion (ghost text after a pause)")
     private val demoMockLabel = JBLabel("")
     private val providerLabel = JBLabel("")
     private val connectionStatus = JBLabel(" ")
@@ -42,9 +44,11 @@ class RubberDuckConfigurable : Configurable {
         testButton.addActionListener { doTestConnection() }
         val panel: JPanel = FormBuilder.createFormBuilder()
             .addLabeledComponent("Backend URL:", backendUrlField, 1, false)
+            .addLabeledComponent("Dashboard URL:", dashboardUrlField, 1, false)
             .addComponent(sendEventsBox, 1)
             .addLabeledComponent("Intervention frequency:", frequencyBox, 1, false)
             .addComponent(privacyBox, 1)
+            .addComponent(inlineCompletionBox, 1)
             .addSeparator()
             .addLabeledComponent("LLM provider/model:", providerLabel, 1, false)
             .addLabeledComponent("Backend DEMO_MOCK:", demoMockLabel, 1, false)
@@ -59,25 +63,31 @@ class RubberDuckConfigurable : Configurable {
     override fun isModified(): Boolean {
         val s = RubberDuckSettings.getInstance().state
         return backendUrlField.text.trim() != s.backendUrl ||
+            dashboardUrlField.text.trim() != s.dashboardUrl ||
             sendEventsBox.isSelected != s.sendEventsToDashboard ||
             (frequencyBox.selectedItem as InterventionFrequency) != s.interventionFrequency ||
-            privacyBox.isSelected != s.privacyMode
+            privacyBox.isSelected != s.privacyMode ||
+            inlineCompletionBox.isSelected != s.enableInlineCompletion
     }
 
     override fun apply() {
         val s = RubberDuckSettings.getInstance().state
-        s.backendUrl = backendUrlField.text.trim().ifEmpty { "http://127.0.0.1:8765" }
+        s.backendUrl = backendUrlField.text.trim().ifEmpty { defaultBackendUrl() }
+        s.dashboardUrl = dashboardUrlField.text.trim().ifEmpty { defaultDashboardUrl() }
         s.sendEventsToDashboard = sendEventsBox.isSelected
         s.interventionFrequency = frequencyBox.selectedItem as InterventionFrequency
         s.privacyMode = privacyBox.isSelected
+        s.enableInlineCompletion = inlineCompletionBox.isSelected
     }
 
     override fun reset() {
         val s = RubberDuckSettings.getInstance().state
         backendUrlField.text = s.backendUrl
+        dashboardUrlField.text = s.dashboardUrl
         sendEventsBox.isSelected = s.sendEventsToDashboard
         frequencyBox.selectedItem = s.interventionFrequency
         privacyBox.isSelected = s.privacyMode
+        inlineCompletionBox.isSelected = s.enableInlineCompletion
         providerLabel.text = if (s.lastSeenLlmProvider.isNotEmpty())
             "${s.lastSeenLlmProvider} / ${s.lastSeenLlmModel}" else "(not probed yet)"
         demoMockLabel.text = if (s.demoMockDisplay) "ON" else "off"

@@ -3,6 +3,10 @@ package com.rubberduck.live.net
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.rubberduck.live.model.CodeChatRequest
+import com.rubberduck.live.model.CodeChatResponse
+import com.rubberduck.live.model.CompleteRequest
+import com.rubberduck.live.model.CompleteResponse
 import com.rubberduck.live.model.GenerateTestsRequest
 import com.rubberduck.live.model.GenerateTestsResponse
 import com.rubberduck.live.model.HealthResponse
@@ -63,6 +67,14 @@ class BackendClient {
     @Throws(IOException::class)
     fun socraticQuestion(req: SocraticRequest): SocraticResponse =
         post("/socratic-question", JsonCodec.json.encodeToString(req), SocraticResponse.serializer())
+
+    @Throws(IOException::class)
+    fun complete(req: CompleteRequest): CompleteResponse =
+        post("/complete", JsonCodec.json.encodeToString(req), CompleteResponse.serializer())
+
+    @Throws(IOException::class)
+    fun codeChat(req: CodeChatRequest): CodeChatResponse =
+        post("/code-chat", JsonCodec.json.encodeToString(req), CodeChatResponse.serializer())
 
     private fun <T> post(
         path: String,

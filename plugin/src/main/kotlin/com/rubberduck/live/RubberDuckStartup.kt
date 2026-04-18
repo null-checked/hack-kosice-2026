@@ -11,6 +11,7 @@ import com.rubberduck.live.intervention.StuckInterventionCoordinator
 import com.rubberduck.live.listeners.CaretDwellTracker
 import com.rubberduck.live.listeners.EditorActivityListener
 import com.rubberduck.live.listeners.FileFocusListener
+import com.rubberduck.live.listeners.InspectionListener
 import com.rubberduck.live.listeners.TestExecutionListener
 import com.rubberduck.live.net.EventsWebSocket
 import com.rubberduck.live.storage.EventLog
@@ -48,6 +49,7 @@ class RubberDuckStartup : ProjectActivity {
         FileFocusListener(project).install(projectDisposable)
         CaretDwellTracker(project).install(projectDisposable)
         TestExecutionListener(project).install(projectDisposable)
+        InspectionListener(project).install(projectDisposable)
 
         log.info("RubberDuck Live listeners installed; session=${SessionContext.getInstance().sessionId}")
     }

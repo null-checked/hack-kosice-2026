@@ -147,6 +147,28 @@ The provider is selected per-call by the backend. Same endpoints, same DTOs — 
 
 Prefer individual commands? See [`backend/README.md`](backend/README.md), [`dashboard/README.md`](dashboard/README.md), and [`plugin/README.md`](plugin/README.md).
 
+### Windows
+
+Install once:
+
+- **JDK 21** (e.g., Eclipse Temurin) — set `JAVA_HOME` to its install dir.
+- **Python 3.13** — `winget install Python.Python.3.13` or python.org.
+- **Node 20+ LTS** — nodejs.org.
+- **Git for Windows** — bundles Git Bash, which ships `make`.
+- Optional: **Ollama for Windows** (ollama.ai) + `ollama pull qwen2.5-coder:7b`.
+
+The orchestration is cross-platform: `scripts/kill_port.py` replaces the Unix-only `lsof`, and the macOS `java_home` lookup in the Makefile is guarded. Two paths:
+
+**From Git Bash (recommended):** all standard targets work — `make install`, `make dev`, `make stop`, `make plugin-run`.
+
+**From PowerShell or `cmd.exe`:** `make` isn't available — call the components directly:
+
+```powershell
+cd backend; uv run uvicorn src.main:app --host 127.0.0.1 --port 8765
+cd dashboard; npm run dev
+cd plugin; .\gradlew.bat runIde
+```
+
 ---
 
 ## Demo
@@ -184,7 +206,7 @@ hack-kosice-2026/
 ├── backend/         # Python 3.13 · FastAPI · httpx · OpenAI by default, Ollama fallback
 ├── dashboard/       # Next.js 16 · React 19 · Tailwind 4 · shadcn
 ├── docs/            # Architecture, demo script, judging cheatsheet, phase notes
-├── scripts/         # dev.sh · demo-preflight.sh
+├── scripts/         # dev.sh · demo-preflight.sh · kill_port.py (cross-platform port killer)
 ├── Makefile         # one-command orchestration (make help)
 └── .env.example     # consolidated env reference
 ```
