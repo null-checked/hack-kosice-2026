@@ -1,54 +1,93 @@
-export interface WSEvent {
-    type: string;
-    data: any;
+/**
+ * Wire types mirroring the backend (see `docs/ARCHITECTURE.md` §3–§4) and
+ * the plugin's `DeveloperEvent` / `EventType` models. Kept deliberately
+ * permissive on `payload` so newer fields from the plugin don't break the UI.
+ */
+
+export type EventType =
+  | "EDIT"
+  | "UNDO"
+  | "REDO"
+  | "TEST_RUN"
+  | "FILE_FOCUS"
+  | "CARET_DWELL"
+  | "STUCK_DETECTED"
+  | "INTERVENTION_SHOWN"
+  | "INTERVENTION_ACCEPTED"
+  | "INTERVENTION_DISMISSED";
+
+export const ALL_EVENT_TYPES: readonly EventType[] = [
+  "EDIT",
+  "UNDO",
+  "REDO",
+  "TEST_RUN",
+  "FILE_FOCUS",
+  "CARET_DWELL",
+  "STUCK_DETECTED",
+  "INTERVENTION_SHOWN",
+  "INTERVENTION_ACCEPTED",
+  "INTERVENTION_DISMISSED",
+] as const;
+
+/** Free-form payload blob; individual components narrow with safe accessors. */
+export type EventPayload = Record<string, unknown>;
+
+export interface DeveloperEvent {
+  event_id: string;
+  session_id: string;
+  /** Epoch millis. */
+  ts: number;
+  type: EventType | string;
+  file?: string | null;
+  language?: string | null;
+  payload?: EventPayload;
 }
 
-export interface AgentPersonality {
-    name: string;
-    color: string;
-    approach: string;
+/** Known `STUCK_DETECTED.payload.rule` values (see architecture §5). */
+export type StuckRule =
+  | "undo_burst"
+  | "edit_thrash"
+  | "repeated_failing_test"
+  | "long_idle_on_error"
+  | "rapid_file_switching"
+  | string;
+
+export type WSFrameType =
+  | "hello"
+  | "ack"
+  | "event"
+  | "broadcast"
+  | "ping"
+  | "pong"
+  | "error";
+
+export interface WSEnvelope<P = unknown> {
+  type: WSFrameType;
+  timestamp: number;
+  payload: P;
 }
 
-export interface ArchitectState {
-    status: "idle" | "planning" | "complete";
-    plan?: any;
+/** Initial snapshot payload the backend pushes on dashboard connect. */
+export interface SnapshotPayload {
+  kind: "snapshot";
+  session_id: string;
+  events: DeveloperEvent[];
 }
 
-export interface AgentTask {
-    description: string;
+/** Live-event fan-out payload. */
+export interface LiveEventPayload {
+  kind: "event";
+  session_id?: string;
+  event: DeveloperEvent;
 }
 
-export interface TestFeedback {
-    passed: boolean;
-    message?: string;
-}
+export type BroadcastPayload = SnapshotPayload | LiveEventPayload;
 
-export interface ArenaState {
-    status: "idle" | "parsing" | "planning" | "coding" | "testing" | "synthesizing" | "complete" | "error";
-    problem?: any;
-    architect: ArchitectState;
-    agents: Array<{
-        personality: AgentPersonality;
-        status: "idle" | "coding" | "testing" | "fixing" | "complete";
-        task?: AgentTask;
-        solution?: {
-            agent: string;
-            approach_name: string;
-            thinking: string;
-            time_complexity: string;
-            space_complexity: string;
-            code: string;
-        };
-        testResults?: {
-            agent_name: string;
-        };
-        testFeedback?: TestFeedback;
-        retryCount: number;
-        maxRetries: number;
-        score?: {
-            agent: string;
-        };
-    }>;
-    synthesis?: any;
-    error?: string;
+export type SocketStatus = "connecting" | "open" | "reconnecting" | "closed";
+
+export interface BackendHealth {
+  status: string;
+  llm_provider?: string;
+  llm_model?: string;
+  llm_available?: boolean;
 }

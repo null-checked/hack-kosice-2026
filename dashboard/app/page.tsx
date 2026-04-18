@@ -1,210 +1,142 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Swords, Play, RotateCcw, Wifi, WifiOff } from 'lucide-react';
-import { Arena } from '@/components/arena/Arena';
-import { useArenaSocket } from '@/hooks/useArenaSocket';
+/**
+ * RubberDuck Live — main dashboard page.
+ *
+ * Above-the-fold (1440×900) grid:
+ *   Row 1  ·  Hero (full-width)
+ *   Row 2  ·  WellnessScore (3) | ActivityHeatmap (6) | MetricTile×2 stacked (3)
+ *   Row 3  ·  FlowStateChart (8)      | AntiPatternsList (4)
+ *   Row 4  ·  StuckMomentsTimeline (7) | SocraticFeed (5)
+ *   Row 5  ·  EventStream (12, below fold)
+ */
 
-export default function Home() {
-  const [problemInput, setProblemInput] = useState('');
-  const [showArena, setShowArena] = useState(false);
+import { useCallback, useMemo, useState } from "react";
+import { Activity, PlayCircle, Zap } from "lucide-react";
 
-  const {
-    connect,
-    disconnect,
-    sendProblem,
-    arenaState,
-    isConnected,
-    error: socketError,
-  } = useArenaSocket({
-    url: 'http://localhost:8000/projects/build',
-    autoReconnect: true,
-  });
+import { Hero } from "@/components/layout/Hero";
+import { SessionSwitcher } from "@/components/layout/SessionSwitcher";
+import { StatusPill } from "@/components/layout/StatusPill";
+import { ActivityHeatmap } from "@/components/wellness/ActivityHeatmap";
+import { AntiPatternsList } from "@/components/wellness/AntiPatternsList";
+import { EventStream } from "@/components/wellness/EventStream";
+import { FlowStateChart } from "@/components/wellness/FlowStateChart";
+import { SocraticFeed } from "@/components/wellness/SocraticFeed";
+import { StuckMomentsTimeline } from "@/components/wellness/StuckMomentsTimeline";
+import { WellnessScore } from "@/components/wellness/WellnessScore";
+import { MetricTile } from "@/components/viz/MetricTile";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { useDerivedMetrics } from "@/hooks/useDerivedMetrics";
+import { useEventsSocket } from "@/hooks/useEventsSocket";
+import { generateDemoReplay } from "@/lib/demoReplay";
+import { shortenFile } from "@/lib/format";
 
-  // Auto-connect on mount
-  useEffect(() => {
-    connect();
-    return () => disconnect();
-  }, [connect, disconnect]);
+const DEMO_REPLAY_ENABLED = process.env.NEXT_PUBLIC_DEMO_REPLAY === "1";
 
-  const handleStartArena = () => {
-    if (!problemInput.trim()) {
-      return;
-    }
+export default function DashboardPage() {
+    const socket = useEventsSocket();
+    const metrics = useDerivedMetrics(socket.events);
+    const health = useBackendHealth();
+    const [demoInjected, setDemoInjected] = useState(false);
 
-    setShowArena(true);
-    sendProblem(problemInput, 3);
-  };
+    const injectDemo = useCallback(() => {
+        socket.injectEvents(generateDemoReplay());
+        setDemoInjected(true);
+    }, [socket]);
 
-  const handleReset = () => {
-    setShowArena(false);
-    setProblemInput('');
-  };
+    const hasEvents = socket.events.length > 0;
 
-  // Example problems
-  const exampleProblems = [
-    {
-      title: 'Two Sum',
-      description: 'Given an array of integers nums and an integer target, return indices of the two numbers that add up to target.',
-    },
-    {
-      title: 'Fibonacci',
-      description: 'Write a function that returns the nth Fibonacci number.',
-    },
-    {
-      title: 'Palindrome Check',
-      description: 'Given a string, determine if it is a palindrome, considering only alphanumeric characters and ignoring cases.',
-    },
-  ];
+    const editsTrend = useMemo(
+        () => metrics.flow.bins.map((b) => b.edit),
+        [metrics.flow],
+    );
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-white to-zinc-100 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg">
-              <Swords className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Code Arena
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Multi-Agent Competitive Programming
-              </p>
-            </div>
-          </div>
+    const topFile = metrics.topFiles[0];
 
-          {/* Connection Status */}
-          <Badge variant={isConnected ? 'default' : 'destructive'} className="gap-2">
-            {isConnected ? (
-              <>
-                <Wifi className="w-3 h-3" />
-                Connected
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-3 h-3" />
-                Disconnected
-              </>
-            )}
-          </Badge>
-        </div>
-
-        {/* Error Display */}
-        {socketError && (
-          <Card className="mb-6 border-red-500 bg-red-50 dark:bg-red-950/20">
-            <CardContent className="py-4">
-              <p className="text-red-600 dark:text-red-400 text-sm">
-                Error: {socketError}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Input Form or Arena */}
-        {!showArena ? (
-          <div className="max-w-4xl mx-auto space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Enter a Coding Problem</CardTitle>
-                <CardDescription>
-                  Describe a programming problem and watch multiple AI agents compete to solve it
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Example: Write a function that finds the longest palindromic substring in a given string."
-                  value={problemInput}
-                  onChange={(e) => setProblemInput(e.target.value)}
-                  className="min-h-[150px] font-mono text-sm"
+    return (
+        <main className="relative min-h-screen w-full mesh-page">
+            <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-5 lg:gap-5 lg:px-6">
+                {/* Row 1 — Hero */}
+                <Hero
+                    right={
+                        <>
+                            <StatusPill status={socket.status} reachable={health.reachable} />
+                            <SessionSwitcher
+                                sessions={socket.sessions}
+                                value={socket.selectedSession}
+                                onChange={socket.switchSession}
+                            />
+                            {DEMO_REPLAY_ENABLED && (
+                                <button
+                                    type="button"
+                                    onClick={injectDemo}
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/20 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-300 hover:bg-violet-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                                >
+                                    <PlayCircle className="h-3.5 w-3.5" />
+                                    {demoInjected ? "Replay demo" : "Demo replay"}
+                                </button>
+                            )}
+                        </>
+                    }
                 />
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={handleStartArena}
-                    disabled={!problemInput.trim() || !isConnected}
-                    size="lg"
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Start Arena
-                  </Button>
+                {/* Row 2 — score · heatmap · tiles */}
+                <section className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+                    <WellnessScore
+                        wellness={metrics.wellness}
+                        empty={!hasEvents}
+                        className="lg:col-span-3"
+                    />
+                    <ActivityHeatmap cells={metrics.heatmap} className="lg:col-span-6" />
+                    <div className="flex flex-col gap-4 lg:col-span-3 lg:gap-5">
+                        <MetricTile
+                            label="Events / min"
+                            value={metrics.eventRate.toFixed(1)}
+                            hint="Rolling 5-min average"
+                            trend={editsTrend}
+                            trendColor="#22d3ee"
+                            icon={<Activity className="h-4 w-4" />}
+                        />
+                        <MetricTile
+                            label="Top file"
+                            value={topFile ? shortenFile(topFile.file) : "—"}
+                            hint={topFile ? `${topFile.edits} edits` : "No edits yet"}
+                            icon={<Zap className="h-4 w-4" />}
+                        />
+                    </div>
+                </section>
 
-                  {!isConnected && (
-                    <p className="text-sm text-muted-foreground">
-                      Waiting for server connection...
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                {/* Row 3 — flow · anti-patterns */}
+                <section className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+                    <FlowStateChart series={metrics.flow} className="lg:col-span-8" />
+                    <AntiPatternsList items={metrics.antiPatterns} className="lg:col-span-4" />
+                </section>
 
-            {/* Example Problems */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Example Problems</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3">
-                  {exampleProblems.map((example, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setProblemInput(example.description)}
-                      className="text-left p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-                    >
-                      <p className="font-medium text-sm">{example.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {example.description}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                {/* Row 4 — timeline · socratic feed */}
+                <section className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+                    <StuckMomentsTimeline
+                        moments={metrics.stuckMoments}
+                        className="lg:col-span-7"
+                    />
+                    <SocraticFeed events={socket.events} className="lg:col-span-5" />
+                </section>
 
-            {/* Info Card */}
-            <Card className="border-purple-200 dark:border-purple-900 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20">
-              <CardContent className="py-6">
-                <h3 className="font-semibold mb-2 flex items-center gap-2">
-                  <Swords className="w-4 h-4 text-purple-600" />
-                  How it works
-                </h3>
-                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                  <li>Enter a coding problem in natural language</li>
-                  <li>Three AI agents with different approaches generate solutions</li>
-                  <li>Each solution is tested and evaluated</li>
-                  <li>A judge ranks them based on correctness, performance, and quality</li>
-                  <li>A synthesizer creates a hybrid &quot;best-of&quot; solution</li>
-                </ol>
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Arena Controls */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Arena in Progress</h2>
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                size="sm"
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                New Problem
-              </Button>
+                {/* Row 5 — event stream (below-fold) */}
+                <section>
+                    <EventStream events={socket.events} />
+                </section>
+
+                <footer className="flex flex-col items-center gap-1 pb-6 pt-2 text-[11px] text-muted-foreground sm:flex-row sm:justify-between">
+                    <span>
+                        Backend: {socket.url}
+                        {health.health?.llm_model ? ` · LLM ${health.health.llm_model}` : ""}
+                    </span>
+                    <span>
+                        {socket.events.length} events in memory
+                        {socket.lastError ? ` · ${socket.lastError}` : ""}
+                    </span>
+                </footer>
             </div>
-
-            {/* Arena Component */}
-            <Arena arenaState={arenaState} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
+        </main>
+    );
 }
