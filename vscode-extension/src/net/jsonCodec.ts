@@ -4,6 +4,9 @@
  * function that lenient-defaults missing fields.
  */
 import type {
+  CodeChatResponse,
+  CompleteResponse,
+  ExplainCodeResponse,
   GenerateTestsResponse,
   HealthResponse,
   SocraticResponse,
@@ -75,5 +78,32 @@ export function parseSocratic(raw: unknown): SocraticResponse {
     question: asString(o['question'], '(no question returned)'),
     follow_ups: asArray(o['follow_ups'], (s) => (typeof s === 'string' ? s : null)),
     confidence: asNumber(o['confidence'], 0.5),
+  };
+}
+
+export function parseComplete(raw: unknown): CompleteResponse {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    completion: asString(o['completion']),
+    stop_reason: asString(o['stop_reason'], 'eol'),
+    model: asString(o['model'], 'unknown'),
+  };
+}
+
+export function parseCodeChat(raw: unknown): CodeChatResponse {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    answer: asString(o['answer'], '(no answer returned)'),
+    model: asString(o['model'], 'unknown'),
+  };
+}
+
+export function parseExplainCode(raw: unknown): ExplainCodeResponse {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    explanation: asString(o['explanation'], '(no explanation returned)'),
+    complexity: asString(o['complexity'], 'unknown'),
+    suggestions: asArray(o['suggestions'], (s) => (typeof s === 'string' ? s : null)),
+    model: asString(o['model'], 'unknown'),
   };
 }

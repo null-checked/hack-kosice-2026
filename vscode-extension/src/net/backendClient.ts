@@ -1,11 +1,20 @@
 import { Config } from '../settings/config';
 import {
+  parseCodeChat,
+  parseComplete,
+  parseExplainCode,
   parseGenerateTests,
   parseHealth,
   parseSocratic,
   parseSuggestRefactor,
 } from './jsonCodec';
 import type {
+  CodeChatRequest,
+  CodeChatResponse,
+  CompleteRequest,
+  CompleteResponse,
+  ExplainCodeRequest,
+  ExplainCodeResponse,
   GenerateTestsRequest,
   GenerateTestsResponse,
   HealthResponse,
@@ -43,6 +52,20 @@ class BackendClientImpl {
 
   async socraticQuestion(req: SocraticRequest): Promise<SocraticResponse> {
     return this.post('/socratic-question', req, parseSocratic);
+  }
+
+  // v0.3 additions
+
+  async complete(req: CompleteRequest): Promise<CompleteResponse> {
+    return this.post('/complete', req, parseComplete);
+  }
+
+  async codeChat(req: CodeChatRequest): Promise<CodeChatResponse> {
+    return this.post('/code-chat', req, parseCodeChat);
+  }
+
+  async explainCode(req: ExplainCodeRequest): Promise<ExplainCodeResponse> {
+    return this.post('/explain-code', req, parseExplainCode);
   }
 
   private async get<T>(url: string, parser: (raw: unknown) => T): Promise<T> {

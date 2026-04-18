@@ -16,6 +16,11 @@ export const EventType = {
   INTERVENTION_SHOWN: 'INTERVENTION_SHOWN',
   INTERVENTION_ACCEPTED: 'INTERVENTION_ACCEPTED',
   INTERVENTION_DISMISSED: 'INTERVENTION_DISMISSED',
+  /**
+   * Local inspection (VSCode diagnostic) fired. Emitted by
+   * `listeners/diagnosticsListener.ts` via `vscode.languages.onDidChangeDiagnostics`.
+   */
+  INSPECTION: 'INSPECTION',
 } as const;
 
 export type EventType = (typeof EventType)[keyof typeof EventType];

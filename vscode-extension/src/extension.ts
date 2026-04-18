@@ -7,13 +7,18 @@ import { registerEditorActivityListener } from './listeners/editorActivityListen
 import { registerFileFocusListener } from './listeners/fileFocusListener';
 import { registerCaretDwellTracker } from './listeners/caretDwellTracker';
 import { registerTestExecutionListener } from './listeners/testExecutionListener';
+import { registerDiagnosticsListener } from './listeners/diagnosticsListener';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerSuggestRefactorCommand } from './commands/suggestRefactor';
 import { registerOpenDashboardCommand } from './commands/openDashboard';
 import { registerTestConnectionCommand } from './commands/testConnection';
+import { registerExplainOldCodeCommand } from './commands/explainOldCode';
 import { registerStatusBarItem } from './ui/statusBarItem';
 import { EventsViewProvider } from './ui/eventsViewProvider';
 import { SocraticViewProvider } from './ui/socraticViewProvider';
+import { registerChatWebviewProvider } from './ui/chatWebviewProvider';
+import { registerShowDashboardCommand } from './ui/dashboardWebviewProvider';
+import { registerInlineCompletionProvider } from './completion/inlineCompletionProvider';
 
 /**
  * Extension entry point. Activates on `onStartupFinished`. We wire everything
@@ -40,14 +45,17 @@ export function activate(context: vscode.ExtensionContext): void {
   registerFileFocusListener(context);
   registerCaretDwellTracker(context);
   registerTestExecutionListener(context);
+  registerDiagnosticsListener(context);
 
   // 4) Commands
   registerGenerateTestsCommand(context);
   registerSuggestRefactorCommand(context);
   registerOpenDashboardCommand(context);
   registerTestConnectionCommand(context);
+  registerExplainOldCodeCommand(context);
+  registerShowDashboardCommand(context);
 
-  // 5) UI: status bar + two tree views.
+  // 5) UI: status bar + two tree views + the new Chat webview.
   registerStatusBarItem(context);
   const eventsView = new EventsViewProvider(context);
   const socraticView = new SocraticViewProvider(context);
@@ -55,6 +63,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('rubberduck.events', eventsView),
     vscode.window.registerTreeDataProvider('rubberduck.socratic', socraticView),
   );
+  registerChatWebviewProvider(context);
+
+  // 6) Inline completion (ghost text).
+  registerInlineCompletionProvider(context);
 
   log.info(`🦆 RubberDuck Live — active. EventLog: ${EventLog.getInstance().currentMode()}`);
 }

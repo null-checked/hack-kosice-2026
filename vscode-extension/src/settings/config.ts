@@ -46,6 +46,12 @@ export class Config {
     return Config.section().get<string>('dashboardUrl', 'http://localhost:3000');
   }
 
+  /** v0.3: ON by default — users who install the extension and type should
+   *  see ghost text immediately. Opt-out via the setting. */
+  static get enableInlineCompletion(): boolean {
+    return Config.section().get<boolean>('enableInlineCompletion', true);
+  }
+
   /** Subscribe to changes under the `rubberduckLive` namespace. */
   static onDidChange(handler: () => void): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration((e) => {

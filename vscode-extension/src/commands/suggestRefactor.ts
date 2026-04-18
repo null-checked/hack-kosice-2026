@@ -71,11 +71,46 @@ export function registerSuggestRefactorCommand(context: vscode.ExtensionContext)
           const title = `🦆 RubberDuck refactor — ${doc.fileName.split('/').pop() ?? 'file'}`;
           await vscode.commands.executeCommand('vscode.diff', doc.uri, virtualUri, title);
           if (summary.length > 0) showInfo('Smells detected', summary);
-          emit({
-            type: EventType.INTERVENTION_ACCEPTED,
-            file: redacted,
-            payload: { intervention_id: interventionId, kind: 'refactor' },
-          });
+
+          // v0.3: wait for explicit Apply / Cancel before touching the file,
+          // and fire the ACCEPTED / DISMISSED events based on the choice.
+          const choice = await vscode.window.showInformationMessage(
+            'Apply RubberDuck refactor?',
+            { modal: false },
+            'Apply',
+            'Cancel',
+          );
+          if (choice === 'Apply') {
+            const edit = new vscode.WorkspaceEdit();
+            const fullRange = new vscode.Range(
+              doc.positionAt(0),
+              doc.positionAt(doc.getText().length),
+            );
+            edit.replace(doc.uri, fullRange, response.refactored_code);
+            const applied = await vscode.workspace.applyEdit(edit);
+            if (applied) {
+              await doc.save();
+              showInfo('✅ Refactor applied', summary.length > 0 ? summary : 'Done. Ctrl+Z to revert.');
+              emit({
+                type: EventType.INTERVENTION_ACCEPTED,
+                file: redacted,
+                payload: { intervention_id: interventionId, kind: 'refactor' },
+              });
+            } else {
+              showInfo('RubberDuck Live', 'Apply failed — the document may have been modified externally.');
+              emit({
+                type: EventType.INTERVENTION_DISMISSED,
+                file: redacted,
+                payload: { intervention_id: interventionId, kind: 'refactor', reason: 'apply_failed' },
+              });
+            }
+          } else {
+            emit({
+              type: EventType.INTERVENTION_DISMISSED,
+              file: redacted,
+              payload: { intervention_id: interventionId, kind: 'refactor' },
+            });
+          }
         } catch (err) {
           log.warn(`Refactor request failed: ${err instanceof Error ? err.message : String(err)}`);
           showInfo('RubberDuck Live', `Refactor request failed: ${err instanceof Error ? err.message : String(err)}`);

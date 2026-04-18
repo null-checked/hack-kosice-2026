@@ -21,13 +21,16 @@
     "commands": [
       { "command": "rubberduck.generateTests",   "title": "🦆 RubberDuck: Generate Tests" },
       { "command": "rubberduck.suggestRefactor", "title": "🦆 RubberDuck: Suggest Refactor" },
-      { "command": "rubberduck.openDashboard",   "title": "🦆 RubberDuck: Open Dashboard" },
-      { "command": "rubberduck.testConnection",  "title": "🦆 RubberDuck: Test Connection" }
+      { "command": "rubberduck.openDashboard",   "title": "🦆 RubberDuck: Open Dashboard (browser)" },
+      { "command": "rubberduck.testConnection",  "title": "🦆 RubberDuck: Test Connection" },
+      { "command": "rubberDuck.showDashboard",   "title": "🦆 RubberDuck: Show Dashboard (in editor)" },
+      { "command": "rubberDuck.explainOldCode",  "title": "🦆 RubberDuck: Explain Old Code" }
     ],
     "menus": {
       "editor/context": [
         { "command": "rubberduck.generateTests",   "group": "rubberduck@1", "when": "editorHasSelection || editorTextFocus" },
-        { "command": "rubberduck.suggestRefactor", "group": "rubberduck@2", "when": "editorTextFocus" }
+        { "command": "rubberduck.suggestRefactor", "group": "rubberduck@2", "when": "editorTextFocus" },
+        { "command": "rubberDuck.explainOldCode",  "group": "rubberduck@3", "when": "editorTextFocus" }
       ]
     },
     "configuration": {
@@ -58,6 +61,11 @@
           "type": "string",
           "default": "http://localhost:3000",
           "description": "URL opened by 🦆 RubberDuck: Open Dashboard."
+        },
+        "rubberduckLive.enableInlineCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI ghost-text completion (calls POST /api/v1/complete). Disable to silence inline suggestions."
         }
       }
     },
@@ -68,6 +76,7 @@
     },
     "views": {
       "rubberduck-live": [
+        { "id": "rubberduck.chat",     "name": "Chat",         "type": "webview" },
         { "id": "rubberduck.events",   "name": "Recent Events" },
         { "id": "rubberduck.socratic", "name": "Socratic Feed" }
       ]

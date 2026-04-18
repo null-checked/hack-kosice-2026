@@ -68,3 +68,55 @@ export interface HealthResponse {
   demo_mock: boolean;
   version: string;
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// v0.3 DTOs — match plugin/.../model/ApiDtos.kt and backend/src/models/api.py.
+
+/** Inline completion request. `prefix` is code BEFORE the caret, `suffix`
+ *  is code AFTER. Fill-in-the-middle style. */
+export interface CompleteRequest {
+  language: string;
+  prefix: string;
+  suffix: string;
+  file_path?: string | null;
+  max_tokens?: number;
+}
+
+export interface CompleteResponse {
+  completion: string;
+  stop_reason: string;
+  model: string;
+}
+
+/** One turn in a /code-chat conversation — standard LLM vocabulary. */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface CodeChatRequest {
+  conversation: ChatTurn[];
+  current_code: string;
+  file_path?: string | null;
+  language: string;
+}
+
+export interface CodeChatResponse {
+  answer: string;
+  model: string;
+}
+
+/** Explain Old Code feature (vscode-branch extension, backported to main). */
+export interface ExplainCodeRequest {
+  code: string;
+  file_path?: string | null;
+  language: string;
+  context: string;
+}
+
+export interface ExplainCodeResponse {
+  explanation: string;
+  complexity: string;
+  suggestions: string[];
+  model: string;
+}
