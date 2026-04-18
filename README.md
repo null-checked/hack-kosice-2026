@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">🦆 RubberDuck Live</h1>
-<p align="center"><em>Your IDE's pair programmer that watches you think.</em></p>
+<p align="center"><em>Your IDE's pair programmer that watches you think.<br>AI-powered via OpenAI by default · swap to local Ollama for 100% offline.</em></p>
 
 <p align="center">
   <a href="https://hackkosice.com"><img alt="Hack Košice 2026" src="https://img.shields.io/badge/Hack%20Košice-2026-8b5cf6?style=for-the-badge"></a>
@@ -11,8 +11,8 @@
   <img alt="Kotlin" src="https://img.shields.io/badge/IntelliJ%20Plugin-Kotlin%202.0-7F52FF?style=for-the-badge&logo=kotlin">
   <img alt="FastAPI" src="https://img.shields.io/badge/Backend-FastAPI%20%C2%B7%20Py%203.13-009688?style=for-the-badge&logo=fastapi">
   <img alt="Next.js" src="https://img.shields.io/badge/Dashboard-Next.js%2016-000000?style=for-the-badge&logo=nextdotjs">
-  <img alt="Ollama" src="https://img.shields.io/badge/LLM-Ollama%20qwen2.5--coder%3A7b-444?style=for-the-badge">
-  <img alt="Local-first" src="https://img.shields.io/badge/100%25-Local%20by%20default-22c55e?style=for-the-badge">
+  <img alt="OpenAI" src="https://img.shields.io/badge/LLM-OpenAI%20gpt--4o--mini-10a37f?style=for-the-badge&logo=openai">
+  <img alt="Local-fallback" src="https://img.shields.io/badge/Local%20fallback-Ollama%20qwen2.5--coder-22c55e?style=for-the-badge">
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@ You rewrite the same loop four times. You *know* something is wrong.
 - ♻️ **Suggests refactors** with an inline unified-diff preview *(Pillar 2)*
 - 🦆 **Watches you think** — detects when you're stuck and nudges with a **Socratic question**, never an answer *(Pillar 3, the META layer)*
 
-**100 % local, 100 % private** — the default LLM is Ollama `qwen2.5-coder:7b` on your machine. Your code never leaves your laptop unless you flip a switch.
+**Privacy-optional, pluggable LLM** — ships with OpenAI `gpt-4o-mini` as the default (zero local setup, just paste the key). Flip one env var and run entirely offline against Ollama `qwen2.5-coder:7b` on your machine. Same plugin, same endpoints, your choice of where the tokens go.
 
 ---
 
@@ -91,14 +91,17 @@ flowchart LR
     Wellness[Wellness score · heatmap<br/>anti-patterns · stuck-timeline]
   end
 
-  Ollama[(Ollama :11434<br/>qwen2.5-coder:7b)]
+  OpenAI[(OpenAI<br/>gpt-4o-mini · default)]
+  Ollama[(Ollama :11434<br/>qwen2.5-coder:7b · offline)]
   Bridge -- HTTP + WS --> REST
   Bridge <--> WS
-  REST --> Pipeline --> Ollama
+  REST --> Pipeline
+  Pipeline --> OpenAI
+  Pipeline -. fallback .-> Ollama
   WS -- broadcast --> Wellness
 ```
 
-All traffic is loopback. No outbound network by default.
+Plugin ↔ backend ↔ dashboard traffic is loopback. The only outbound hop is the chosen LLM provider — and that hop disappears entirely when you select Ollama.
 
 Full blueprint: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -125,23 +128,22 @@ make plugin-run
 
 Pick **one** of:
 
-**A. Local — Ollama (default, no cloud):**
-```bash
-ollama pull qwen2.5-coder:7b
-make dev-live
-```
-
-**B. Cloud — OpenAI (or any OpenAI-compatible endpoint):**
+**A. Cloud — OpenAI (default, zero local setup):**
 ```bash
 cat >> backend/.env <<'EOF'
-LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
 EOF
 make dev-live
+# LLM_PROVIDER defaults to `openai` and OPENAI_MODEL defaults to `gpt-4o-mini`.
 ```
 
-The provider is selected per-call by the backend. Same endpoints, same DTOs — only the dispatch changes. For local OpenAI-compatible servers (LM Studio, vLLM, Groq, Together), set `LLM_PROVIDER=openai_compatible` + `OPENAI_BASE_URL` in the same file. See [`backend/.env.example`](backend/.env.example) for the full list.
+**B. Local — Ollama (100 % offline, privacy-first):**
+```bash
+ollama pull qwen2.5-coder:7b
+make dev-local   # same as dev-live but pins LLM_PROVIDER=ollama
+```
+
+The provider is selected per-call by the backend. Same endpoints, same DTOs — only the dispatch changes. For self-hosted OpenAI-compatible servers (LM Studio, vLLM, Groq, Together), set `LLM_PROVIDER=openai_compatible` + `OPENAI_BASE_URL` in `backend/.env`. See [`backend/.env.example`](backend/.env.example) for the full list.
 
 Prefer individual commands? See [`backend/README.md`](backend/README.md), [`dashboard/README.md`](dashboard/README.md), and [`plugin/README.md`](plugin/README.md).
 
@@ -157,13 +159,13 @@ Five minutes before judging, run the preflight:
 make demo-preflight
 ```
 
-It checks 10 things — Ollama daemon, model pulled, ports free, plugin zip present, deps installed, dashboard seed, git state — and tells you go / no-go.
+It checks 10 things — `OPENAI_API_KEY` present (or Ollama daemon up), ports free, plugin zip present, deps installed, dashboard seed, git state — and tells you go / no-go.
 
 ---
 
 ## Privacy & Security
 
-- **No outbound network by default.** The backend only talks to Ollama on `127.0.0.1:11434`. Cloud LLMs require flipping `LLM_PROVIDER` **and** acknowledging a one-time consent dialog in plugin settings.
+- **Loopback-only inter-component traffic.** Plugin ↔ backend ↔ dashboard never leaves `127.0.0.1`. The only outbound request is the LLM API call, and it disappears entirely when you select `LLM_PROVIDER=ollama`.
 - **No telemetry.** Zero analytics SDKs in plugin or dashboard.
 - **Event log stays local.** SQLite under `$IDE_CONFIG_DIR/rubberduck-live/events.db`, 30-day retention, pruned nightly.
 - **Path redaction is always on.** The plugin strips absolute paths before anything touches the network (`/Users/foo/proj/src/a.py` → `src/a.py`).
@@ -179,7 +181,7 @@ Full threat model: [`docs/ARCHITECTURE.md` §11](docs/ARCHITECTURE.md#11-securit
 ```
 hack-kosice-2026/
 ├── plugin/          # Kotlin · IntelliJ Platform 2024.2+
-├── backend/         # Python 3.13 · FastAPI · httpx · Ollama by default
+├── backend/         # Python 3.13 · FastAPI · httpx · OpenAI by default, Ollama fallback
 ├── dashboard/       # Next.js 16 · React 19 · Tailwind 4 · shadcn
 ├── docs/            # Architecture, demo script, judging cheatsheet, phase notes
 ├── scripts/         # dev.sh · demo-preflight.sh
@@ -193,7 +195,7 @@ hack-kosice-2026/
 
 What's **in** (MVP — shipped for judging):
 
-- 3 right-click actions · 5 StuckDetector rules · live WS dashboard · Ollama + OpenAI-compatible fallback · per-session ring buffer · SQLite plugin-side log · `DEMO_MOCK=1` fixture short-circuit for bulletproof demos.
+- 3 right-click actions · 5 StuckDetector rules · live WS dashboard · OpenAI default + Ollama/OpenAI-compatible fallback chain · per-session ring buffer · SQLite plugin-side log · `DEMO_MOCK=1` fixture short-circuit for bulletproof demos.
 
 What we'd build **next**:
 

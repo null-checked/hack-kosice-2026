@@ -49,7 +49,9 @@ flowchart LR
   Dashboard <-- WS --> WS
 ```
 
-All traffic is loopback (`127.0.0.1`). No outbound network by default.
+Plugin ↔ backend ↔ dashboard traffic is loopback (`127.0.0.1`). The only
+outbound hop is the LLM provider — OpenAI `gpt-4o-mini` by default, or zero
+outbound when `LLM_PROVIDER=ollama`.
 
 ---
 
@@ -211,9 +213,11 @@ Response:
 ```json
 {
   "status": "ok",
-  "llm_provider": "ollama",
-  "llm_model": "qwen2.5-coder:7b",
-  "llm_available": true
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini",
+  "llm_available": true,
+  "demo_mock": false,
+  "version": "0.2.0"
 }
 ```
 
@@ -328,23 +332,35 @@ type StuckMoment = {
 
 ## 8. LLM Provider Strategy **[DECISION]**
 
-Selection order (first available wins):
+Primary / fallback order. The primary from `LLM_PROVIDER` is always tried
+first; on failure the factory walks the `LLM_FALLBACK_CHAIN` in order:
 
-1. **Ollama** (default) — `http://127.0.0.1:11434`, model `qwen2.5-coder:7b`. Probed at `/health` via `GET /api/tags`.
-2. **OpenAI-compatible** — any `OPENAI_BASE_URL` + `OPENAI_API_KEY` env. Enables LM Studio, vLLM, Together, Groq, etc.
-3. **OpenAI** — pure OpenAI if only `OPENAI_API_KEY` is set (no base URL).
+1. **OpenAI** *(default)* — official endpoint, model `gpt-4o-mini`. Chosen by
+   default because the hackathon organiser supplies a ready-to-use API key.
+   `/health` does **not** call OpenAI — it only checks that `OPENAI_API_KEY`
+   is set and non-empty (result cached 60 s so rapid polling from the plugin
+   tool window is free).
+2. **OpenAI-compatible** — any `OPENAI_BASE_URL` + `OPENAI_API_KEY`. Enables
+   LM Studio, vLLM, Together, Groq, etc.
+3. **Ollama** — `http://127.0.0.1:11434`, model `qwen2.5-coder:7b`. The
+   fully-offline, zero-outbound path. Probed at `/health` via
+   `GET /api/tags`.
 
 Config (env, `backend/.env`):
 ```
-LLM_PROVIDER=ollama            # ollama | openai_compatible | openai
+LLM_PROVIDER=openai            # openai | openai_compatible | ollama
+LLM_FALLBACK=true
+LLM_FALLBACK_CHAIN=["openai","openai_compatible","ollama"]
+
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+# OPENAI_BASE_URL=http://127.0.0.1:1234/v1   # set to use an OpenAI-compatible server
+
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen2.5-coder:7b
-OPENAI_BASE_URL=
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
 ```
 
-Implementation: one `LlmProvider` interface with `async def chat_json(messages, schema) -> dict`. Adapters wrap `httpx.AsyncClient` for Ollama's `/api/chat` (with `format: "json"`) and OpenAI's `/v1/chat/completions` (with `response_format: {type:"json_object"}`). The existing `langchain_openai` dependency is **dropped** — swap to raw `httpx` to eliminate cold-start latency and keep the dependency surface small.
+Implementation: one `LlmProvider` interface with `async def chat_json(messages, schema) -> dict`. Adapters wrap `httpx.AsyncClient` for OpenAI's `/v1/chat/completions` (with `response_format: {type:"json_object"}`) and Ollama's `/api/chat` (with `format: "json"`). The `langchain_openai` dependency is **not** used — raw `httpx` keeps cold-start latency low and the dependency surface small. When the primary provider can't be built at boot (e.g. `LLM_PROVIDER=openai` but no API key), the factory logs a WARN and picks the next configurable provider from the fallback chain; if nothing is configurable the server still boots into a degraded state where `DEMO_MOCK=1` works and `/health` reports `llm_available=false`.
 
 ---
 
@@ -386,7 +402,7 @@ Backend CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 
 ## 11. Security & Privacy
 
-- **No outbound network by default.** Backend only talks to Ollama on loopback. Cloud LLM requires the user flipping `LLM_PROVIDER` in settings **and** acknowledging a one-time consent dialog in the plugin settings UI.
+- **Loopback-only inter-component traffic.** Plugin ↔ backend ↔ dashboard never leaves `127.0.0.1`. The only outbound hop is the chosen LLM provider. The default provider is OpenAI (`gpt-4o-mini`); selecting `LLM_PROVIDER=ollama` produces a zero-outbound, fully offline setup.
 - **No telemetry.** No analytics SDKs in plugin or dashboard.
 - **Event log stays on disk in the IDE config dir** (user-local, not synced).
 - **Code never touches the filesystem on the backend.** `POST /generate-tests` returns the test body; the plugin writes it via VFS.

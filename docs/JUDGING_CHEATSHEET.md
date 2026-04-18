@@ -6,7 +6,7 @@
 
 ## Elevator Pitch
 
-**RubberDuck Live is a privacy-first IntelliJ plugin that watches how you code, detects when you're stuck, and asks the right Socratic question instead of generating more code for you.**
+**RubberDuck Live is a privacy-optional IntelliJ plugin that watches how you code, detects when you're stuck, and asks the right Socratic question instead of generating more code for you. Runs on OpenAI `gpt-4o-mini` by default; one env flip moves the entire AI path onto a local Ollama for zero-outbound privacy.**
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## Top 5 Differentiators vs Other Hackathon Entries
 
-1. **Privacy-first by default** — 100 % localhost; Ollama `qwen2.5-coder:7b`; no outbound network unless the user explicitly opts in. Your code never leaves the machine.
+1. **AI via OpenAI `gpt-4o-mini` by default; fully swappable to local Ollama for zero-outbound privacy.** Plugin ↔ backend ↔ dashboard stay on `127.0.0.1` no matter what — the *only* outbound hop is the chosen LLM provider, and that hop disappears entirely when you flip `LLM_PROVIDER=ollama`. Privacy-optional, not privacy-required — still unusual in a hackathon field where most entries hard-code a vendor.
 2. **Socratic, not generative** — We don't autocomplete. We ask *"What invariant are you trying to preserve?"* This is a genuinely new interaction pattern in a space full of Copilot clones.
 3. **META developer-wellness angle** — Flow-state heatmap, personal anti-pattern detection, stuck-moment timeline. No other entry will have this.
 4. **Native IntelliJ plugin** — Real Kotlin + Platform SDK integration (actions, listeners, tool window, balloon notifications, native diff viewer), not a web-app wrapper. JetBrains judges reward this heavily.
@@ -30,7 +30,7 @@
 
 ## Tech Stack (one-liner)
 
-**Kotlin / IntelliJ Platform SDK 2024.2+** plugin · **Python 3.13 / FastAPI / httpx** backend with a reused architect-agent pipeline · **Next.js 16 / React 19 / Tailwind 4 / shadcn** dashboard · **Ollama** `qwen2.5-coder:7b` default LLM, OpenAI-compatible fallback · **SQLite** for local event log · all loopback, ports `8765 / 3000 / 11434`.
+**Kotlin / IntelliJ Platform SDK 2024.2+** plugin · **Python 3.13 / FastAPI / httpx** backend with a reused architect-agent pipeline · **Next.js 16 / React 19 / Tailwind 4 / shadcn** dashboard · **OpenAI `gpt-4o-mini`** default LLM with Ollama `qwen2.5-coder:7b` + OpenAI-compatible fallback chain · **SQLite** for local event log · all inter-component traffic is loopback, ports `8765 / 3000` (+ `11434` when running Ollama).
 
 ---
 
@@ -61,7 +61,7 @@
 - **Lines of plugin code**: *TBD Phase 5*
 - **Backend endpoints**: 4 (`/generate-tests`, `/suggest-refactor`, `/socratic-question`, `/health`) + 1 WebSocket (`/events`)
 - **Stuck-detection rules**: 5 (undo burst, repeated failing test, long idle on error, rapid file switching, edit thrash)
-- **Works offline**: ✅ yes, with Ollama
+- **Works offline**: ✅ with `LLM_PROVIDER=ollama` (and `DEMO_MOCK=1` needs nothing)
 - **Telemetry**: ❌ none
 
 ---

@@ -1,6 +1,6 @@
 # RubberDuck Live — 3-Minute Demo Script
 
-Target length: **3:00**. Two presenters recommended (`P1` = narrator/driver, `P2` = dashboard + commentary). Rehearse twice before judging. Use a fresh IntelliJ window with a prepared `demo/` Python project already open and Ollama pre-warmed (`ollama run qwen2.5-coder:7b "hi"` before the judges arrive).
+Target length: **3:00**. Two presenters recommended (`P1` = narrator/driver, `P2` = dashboard + commentary). Rehearse twice before judging. Use a fresh IntelliJ window with a prepared `demo/` Python project already open. The default LLM is **OpenAI `gpt-4o-mini`** — make sure `OPENAI_API_KEY` is set in `backend/.env` before you walk in. If you'd rather run the full-offline path, pre-warm Ollama with `ollama run qwen2.5-coder:7b "hi"` and export `LLM_PROVIDER=ollama`.
 
 ---
 
@@ -11,7 +11,7 @@ Target length: **3:00**. Two presenters recommended (`P1` = narrator/driver, `P2
 **P1 (camera on presenter, IDE visible):**
 > "Every developer has been stuck staring at the same red squiggly for ten minutes. You rewrite the same loop four times. You *know* something's wrong. What if your IDE gently asked the right question at the right moment — without stealing the keyboard from you?
 >
-> That's **RubberDuck Live**. An IntelliJ plugin that watches your workflow, privately, on your machine, and intervenes with a Socratic question — not another Copilot autocomplete. It also writes your tests and suggests refactors on demand. One hundred percent local. Ollama by default."
+> That's **RubberDuck Live**. An IntelliJ plugin that watches your workflow, privately, on your machine, and intervenes with a Socratic question — not another Copilot autocomplete. It also writes your tests and suggests refactors on demand. AI-powered by OpenAI `gpt-4o-mini` by default — one env flip and the whole AI path runs on local Ollama, zero outbound."
 
 **Visual cue**: Briefly show the three pillars as a side chyron:
 - ✅ Generate Tests
@@ -45,7 +45,7 @@ def fizzbuzz(n: int) -> str:
 4. A new editor tab `demo/test_fizz.py` opens with a generated test file.
 
 **P1 narration over action**:
-> "Right-click any function, pick *Generate Tests*. The plugin sends the function to our local FastAPI backend, which runs a planner-worker pipeline on Ollama. No code leaves the machine. Out comes a pytest file covering the happy path, the FizzBuzz edge case, and boundary inputs — ready to run."
+> "Right-click any function, pick *Generate Tests*. The plugin sends the function to our local FastAPI backend, which runs a planner-worker pipeline against OpenAI `gpt-4o-mini` — or a local Ollama if you flip one env var. Out comes a pytest file covering the happy path, the FizzBuzz edge case, and boundary inputs — ready to run."
 
 **Expected generated content** *(approximate, used only as a sanity reference — do not rely on exact wording)*:
 ```python
@@ -199,9 +199,9 @@ before the judges arrive. The automation for steps 1–8 is available as
 [`scripts/demo-preflight.sh`](../scripts/demo-preflight.sh) via
 `make demo-preflight`.
 
-1. **Ollama model present** — `ollama list | grep qwen2.5-coder:7b`
-2. **Ollama daemon reachable** — `curl -fsS http://127.0.0.1:11434/api/tags`
-3. **`make demo-preflight` passes all 10 checks** (ports free, zip present, deps installed, git clean).
+1. **OpenAI API key set** (primary path) — `grep -q '^OPENAI_API_KEY=sk-' backend/.env` *(or `printenv OPENAI_API_KEY`)*. Default provider is `openai` + `gpt-4o-mini`.
+2. **Ollama fallback available** (optional, only if you plan to demo the offline path) — `ollama list | grep qwen2.5-coder:7b` and `curl -fsS http://127.0.0.1:11434/api/tags`.
+3. **`make demo-preflight` passes all 10 checks** (ports free, zip present, deps installed, git clean). The preflight accepts either path — OpenAI *or* Ollama — as a valid green.
 4. **`make dev-live` starts without errors** — leave it running; watch the first 5 s of output.
 5. **Browser at `http://localhost:3000`** shows the green **"Live"** pill in the top-right of the Hero.
 6. **IntelliJ tool window "RubberDuck Live"** shows a green connection dot (right-edge panel, pre-opened).

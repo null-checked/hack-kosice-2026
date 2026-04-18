@@ -33,8 +33,14 @@ class Settings(BaseSettings):
     DEMO_MOCK: bool = False
 
     # LLM provider
-    LLM_PROVIDER: str = "ollama"  # ollama | openai_compatible | openai
+    # Default is OpenAI because the hackathon organisers supply an API key.
+    # Swap to "ollama" for a fully offline path, or "openai_compatible" for
+    # self-hosted OpenAI-API-shaped endpoints (LM Studio / vLLM / Groq / …).
+    LLM_PROVIDER: str = "openai"  # openai | openai_compatible | ollama
     LLM_FALLBACK: bool = True
+    # Ordered fallback chain tried after the primary fails. The primary is
+    # always attempted first regardless of its position in this list.
+    LLM_FALLBACK_CHAIN: list[str] = ["openai", "openai_compatible", "ollama"]
     LLM_TIMEOUT_SECONDS: float = 60.0
 
     # Ollama

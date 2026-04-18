@@ -11,8 +11,9 @@
       <li>Suggests refactors with a native diff preview (right-click → <b>RubberDuck → Suggest Refactor</b>).</li>
       <li>Detects when you're stuck (undo bursts, repeated test failures, long idle on errors) and asks a Socratic question.</li>
     </ul>
-    <p>All traffic stays on <code>127.0.0.1</code>. Default LLM is local Ollama. See the companion
-    dashboard at <code>http://localhost:3000</code>.</p>
+    <p>The backend is pluggable — OpenAI <code>gpt-4o-mini</code> by default, or a fully local
+    Ollama setup for zero-outbound privacy. See the companion dashboard at
+    <code>http://localhost:3000</code>.</p>
     ]]></description>
 
     <change-notes><![CDATA[

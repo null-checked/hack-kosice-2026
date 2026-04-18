@@ -45,17 +45,11 @@ warn_if() {
 
 printf "%s🦆 RubberDuck Live — demo pre-flight%s\n\n" "$c_bold" "$c_reset"
 
-# 1-3. LLM provider ready — either Ollama OR OpenAI credentials.
-#      We accept EITHER path so teams using cloud LLMs pass the preflight too.
-ollama_ok=0
-if command -v ollama >/dev/null 2>&1 \
-   && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 \
-   && ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"; then
-  ollama_ok=1
-fi
-
+# 1-3. LLM provider ready. OpenAI (default) is the PRIMARY gate; Ollama is
+#      accepted as an alternative so teams demoing the offline path still
+#      pass. Either one makes check #1 green.
 openai_ok=0
-# Pull .env if present so the check sees OPENAI_API_KEY without exporting it.
+# Pull backend/.env if present so the check sees OPENAI_API_KEY without exporting it.
 if [ -f backend/.env ]; then
   # shellcheck disable=SC1091
   set -a && . backend/.env && set +a
@@ -64,15 +58,31 @@ if [ -n "${OPENAI_API_KEY:-}" ]; then
   openai_ok=1
 fi
 
-check "LLM provider configured (Ollama local OR OPENAI_API_KEY)" \
-  bash -c "[ $ollama_ok -eq 1 ] || [ $openai_ok -eq 1 ]"
+ollama_ok=0
+if command -v ollama >/dev/null 2>&1 \
+   && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 \
+   && ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"; then
+  ollama_ok=1
+fi
 
-if [ "$ollama_ok" -eq 1 ]; then
-  check "Ollama daemon reachable (127.0.0.1:11434)" curl -fsS http://127.0.0.1:11434/api/tags
-  check "qwen2.5-coder:7b model pulled"           bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
+check "LLM provider configured (OPENAI_API_KEY set — default — OR local Ollama ready)" \
+  bash -c "[ $openai_ok -eq 1 ] || [ $ollama_ok -eq 1 ]"
+
+if [ "$openai_ok" -eq 1 ]; then
+  check "OPENAI_API_KEY non-empty in backend/.env (primary provider)" \
+    bash -c '[ -n "${OPENAI_API_KEY:-}" ]'
+  if [ "$ollama_ok" -eq 1 ]; then
+    check "Ollama fallback available (bonus: qwen2.5-coder:7b pulled)" \
+      bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
+  else
+    warn_if "Ollama fallback available (optional when OpenAI is primary)" \
+      bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
+  fi
 else
-  warn_if "Ollama daemon reachable (optional if OpenAI in use)" curl -fsS http://127.0.0.1:11434/api/tags
-  warn_if "qwen2.5-coder:7b model pulled (optional if OpenAI in use)" \
+  # Offline-only demo path: Ollama is the only provider.
+  check "Ollama daemon reachable (127.0.0.1:11434) — primary when no OpenAI key" \
+    curl -fsS http://127.0.0.1:11434/api/tags
+  check "qwen2.5-coder:7b model pulled" \
     bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
 fi
 

@@ -200,3 +200,16 @@ edits; only the command-listener registration path changed).
   submission.
 - First `./gradlew runIde` will download the 2024.2 community IDE (~500 MB).
   Budget 5 minutes extra on a cold laptop.
+
+## 5.7 · Default LLM provider flip (post-Phase-5 delta)
+
+The hackathon organiser now supplies an OpenAI API key, so the backend's
+default `LLM_PROVIDER` was flipped from `ollama` → `openai` (model
+`gpt-4o-mini`). `LLM_FALLBACK_CHAIN=["openai","openai_compatible","ollama"]`
+keeps local Ollama as a last-resort fallback. `/health` no longer calls
+OpenAI on every poll — it just checks `OPENAI_API_KEY` is non-empty, cached
+60 s. `DEMO_MOCK=1` behaviour is untouched (still provider-agnostic). A new
+`make dev-local` target pins `LLM_PROVIDER=ollama` for the offline demo path.
+See the root [`README.md`](../README.md), [`ARCHITECTURE.md`](ARCHITECTURE.md) §8,
+and [`JUDGING_CHEATSHEET.md`](JUDGING_CHEATSHEET.md) for the user-facing
+phrasing updates.

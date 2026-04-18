@@ -155,6 +155,36 @@ class OpenAIClient(OpenAICompatibleClient):
         )
 
 
+class UnavailableLLMClient(BaseLLMClient):
+    """Placeholder client used when no provider can be configured at startup.
+
+    Reports `available() -> False` and raises `LLMUnavailableError` if someone
+    actually tries to `complete()`. The backend still boots cleanly (so that
+    `DEMO_MOCK=1` and the `/health` endpoint work), but live LLM calls fail
+    fast with a readable error instead of crashing the process.
+    """
+
+    name = "unavailable"
+
+    def __init__(self, reason: str, model: str = "(none)") -> None:
+        self.reason = reason
+        self.model = model
+
+    async def available(self) -> bool:
+        return False
+
+    async def complete(
+        self,
+        prompt: str,
+        system: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2048,
+    ) -> str:
+        raise LLMUnavailableError(
+            f"No LLM provider configured. Reason: {self.reason}"
+        )
+
+
 class FallbackLLMClient(BaseLLMClient):
     """Tries `primary` first; on failure, walks through `fallbacks` in order."""
 
@@ -197,7 +227,18 @@ class FallbackLLMClient(BaseLLMClient):
 
 
 def create_llm_client(settings: Settings) -> BaseLLMClient:
-    """Build the active LLM client based on settings, with optional fallback chain."""
+    """Build the active LLM client based on settings, with optional fallback chain.
+
+    Priority:
+      1. The provider named by `settings.LLM_PROVIDER` is the primary.
+      2. If `LLM_FALLBACK` is true, additional providers are tried in the
+         order listed by `settings.LLM_FALLBACK_CHAIN` (primary is skipped).
+      3. If the primary can't even be constructed (e.g. `openai` selected but
+         `OPENAI_API_KEY` missing), log a loud WARN and fall through to the
+         first configurable provider in the fallback chain. If no provider is
+         configurable, return an `UnavailableLLMClient` so the server still
+         boots (DEMO_MOCK + /health keep working).
+    """
 
     def _ollama() -> OllamaClient:
         return OllamaClient(
@@ -225,33 +266,74 @@ def create_llm_client(settings: Settings) -> BaseLLMClient:
             timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
+    makers: dict[str, Any] = {
+        "ollama": _ollama,
+        "openai_compatible": _openai_compat,
+        "openai": _openai,
+    }
+
+    def _build(name: str) -> BaseLLMClient | None:
+        maker = makers.get(name.lower())
+        if maker is None:
+            return None
+        try:
+            return maker()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to build LLM client %r: %s", name, exc)
+            return None
+
     provider = settings.LLM_PROVIDER.lower()
-    primary: BaseLLMClient
-    if provider == "openai_compatible":
-        candidate = _openai_compat()
-        if candidate is None:
-            raise ValueError("LLM_PROVIDER=openai_compatible requires OPENAI_BASE_URL")
-        primary = candidate
-    elif provider == "openai":
-        candidate = _openai()
-        if candidate is None:
-            raise ValueError("LLM_PROVIDER=openai requires OPENAI_API_KEY")
-        primary = candidate
-    else:
-        primary = _ollama()
+    primary = _build(provider)
+
+    if primary is None:
+        # Graceful degradation: pick the first configurable provider from the
+        # declared fallback chain. Emit a clear WARN explaining why.
+        reason = {
+            "openai": "OPENAI_API_KEY is not set",
+            "openai_compatible": "OPENAI_BASE_URL is not set",
+            "ollama": "ollama client failed to initialise",
+        }.get(provider, f"provider {provider!r} is not configured")
+        logger.warning(
+            "LLM primary provider %r is unavailable (%s). Searching fallback chain %s…",
+            provider,
+            reason,
+            settings.LLM_FALLBACK_CHAIN,
+        )
+        for candidate_name in settings.LLM_FALLBACK_CHAIN:
+            if candidate_name.lower() == provider:
+                continue
+            candidate = _build(candidate_name)
+            if candidate is not None:
+                logger.warning(
+                    "Using fallback LLM provider %r (%s) as primary.",
+                    candidate.name,
+                    candidate.model,
+                )
+                primary = candidate
+                break
+        if primary is None:
+            logger.warning(
+                "No LLM provider could be configured. Backend will boot in a "
+                "degraded state — /health will report llm_available=false and "
+                "live LLM calls will raise. DEMO_MOCK=1 still works."
+            )
+            return UnavailableLLMClient(reason=reason)
 
     if not settings.LLM_FALLBACK:
         return primary
 
-    # Build ordered fallback list, skipping the primary and any unconfigured ones.
+    # Build ordered fallback list from LLM_FALLBACK_CHAIN, skipping the primary
+    # and any unconfigurable providers.
     fallbacks: list[BaseLLMClient] = []
     seen = {primary.name}
-    for maker in (_ollama, _openai_compat, _openai):
-        candidate = maker()
+    for name in settings.LLM_FALLBACK_CHAIN:
+        candidate = _build(name)
         if candidate is None or candidate.name in seen:
             continue
         fallbacks.append(candidate)
         seen.add(candidate.name)
+    if not fallbacks:
+        return primary
     return FallbackLLMClient(primary=primary, fallbacks=fallbacks)
 
 

@@ -35,12 +35,11 @@ async def lifespan(app: FastAPI):
         settings.LLM_PROVIDER,
         settings.active_llm_model,
     )
-    try:
-        llm_client = create_llm_client(settings)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("LLM client init failed (%s); falling back to Ollama default", exc)
-        settings.LLM_PROVIDER = "ollama"
-        llm_client = create_llm_client(settings)
+    # create_llm_client handles graceful degradation internally (emits WARNs
+    # and returns an UnavailableLLMClient if nothing is configurable), so the
+    # backend always boots — DEMO_MOCK=1 and /health continue to work even
+    # when no API key is set.
+    llm_client = create_llm_client(settings)
 
     # Probe LLM at startup (non-blocking best effort).
     try:

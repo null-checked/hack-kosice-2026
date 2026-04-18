@@ -22,7 +22,7 @@ C_YELL  := $(shell tput -T xterm setaf 3 2>/dev/null || echo "")
 C_RED   := $(shell tput -T xterm setaf 1 2>/dev/null || echo "")
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-live plugin-build plugin-run plugin-verify \
+.PHONY: help install dev dev-live dev-local plugin-build plugin-run plugin-verify \
         demo demo-preflight check check-backend check-dashboard check-plugin \
         clean stop
 
@@ -35,7 +35,8 @@ help:
 	@printf "  $(C_GREEN)install$(C_RESET)         install backend + dashboard deps + gradle wrapper\n"
 	@printf "\n$(C_BOLD)Run$(C_RESET)\n"
 	@printf "  $(C_GREEN)dev$(C_RESET)             backend (mock) + dashboard in parallel\n"
-	@printf "  $(C_GREEN)dev-live$(C_RESET)        same as dev but DEMO_MOCK=0 (requires Ollama)\n"
+	@printf "  $(C_GREEN)dev-live$(C_RESET)        DEMO_MOCK=0, real LLM — OpenAI by default (needs OPENAI_API_KEY)\n"
+	@printf "  $(C_GREEN)dev-local$(C_RESET)       DEMO_MOCK=0, LLM_PROVIDER=ollama — fully offline path (needs Ollama)\n"
 	@printf "  $(C_GREEN)demo$(C_RESET)            alias for dev — the judging flow\n"
 	@printf "  $(C_GREEN)demo-preflight$(C_RESET)  run the 10-step pre-demo checklist\n"
 	@printf "  $(C_GREEN)stop$(C_RESET)            kill anything we spawned on :3000 / :8765\n"
@@ -66,9 +67,16 @@ install:
 dev:
 	@bash scripts/dev.sh mock
 
-## dev-live — same but with real LLM
+## dev-live — real LLM; uses the backend's default provider (OpenAI by
+## default — set OPENAI_API_KEY in backend/.env first). For the local-only
+## Ollama path use `make dev-local` instead.
 dev-live:
 	@bash scripts/dev.sh live
+
+## dev-local — real LLM pinned to local Ollama (requires `ollama` on :11434
+## and `qwen2.5-coder:7b` pulled). Overrides LLM_PROVIDER for this run only.
+dev-local:
+	@LLM_PROVIDER=ollama bash scripts/dev.sh live
 
 ## demo — judging-day alias
 demo: dev

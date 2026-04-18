@@ -2,7 +2,9 @@
 
 Local FastAPI backend for the **RubberDuck Live** IntelliJ plugin and Next.js
 dashboard. Serves four HTTP endpoints plus one WebSocket, binds loopback only
-(`127.0.0.1:8765`), and defaults to local [Ollama](https://ollama.ai).
+(`127.0.0.1:8765`). Default LLM is **OpenAI `gpt-4o-mini`** (just set
+`OPENAI_API_KEY`); a local [Ollama](https://ollama.ai) setup is fully
+supported as the offline / privacy-first fallback.
 
 See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for the full contract.
 
@@ -57,13 +59,14 @@ Copy [`.env.example`](.env.example) to `.env` and edit. Highlights:
 | `APP_HOST`         | `127.0.0.1`      | Always loopback. |
 | `APP_PORT`         | `8765`           | Architecture §10. |
 | `DEMO_MOCK`        | `0`              | Set to `1` for canned demo responses. |
-| `LLM_PROVIDER`     | `ollama`         | `ollama` \| `openai_compatible` \| `openai` |
-| `LLM_FALLBACK`     | `true`           | If primary fails, try others in order. |
-| `OLLAMA_BASE_URL`  | `http://127.0.0.1:11434` | |
+| `LLM_PROVIDER`     | `openai`         | `openai` \| `openai_compatible` \| `ollama` |
+| `LLM_FALLBACK`     | `true`           | If primary fails, walk `LLM_FALLBACK_CHAIN` in order. |
+| `LLM_FALLBACK_CHAIN` | `["openai","openai_compatible","ollama"]` | JSON list of providers to try after the primary. |
+| `OPENAI_API_KEY`   | *(unset)*        | **Required for the default OpenAI provider** (and for OpenAI-compatible). |
+| `OPENAI_MODEL`     | `gpt-4o-mini`    | Override for e.g. `gpt-4o`. |
+| `OPENAI_BASE_URL`  | *(unset)*        | Set to use an OpenAI-compatible server (LM Studio, vLLM, Groq, Together). |
+| `OLLAMA_BASE_URL`  | `http://127.0.0.1:11434` | Used when provider/fallback is `ollama`. |
 | `OLLAMA_MODEL`     | `qwen2.5-coder:7b`       | |
-| `OPENAI_BASE_URL`  | *(unset)*        | For LM Studio / vLLM / Together / Groq. |
-| `OPENAI_API_KEY`   | *(unset)*        | Required for OpenAI or OpenAI-compatible. |
-| `OPENAI_MODEL`     | `gpt-4o-mini`    | |
 | `RUBBERDUCK_TOKEN` | *(unset)*        | If set, clients must send `X-RubberDuck-Token`. |
 
 ## Quick curl examples
