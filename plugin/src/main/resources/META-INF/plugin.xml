@@ -1,0 +1,84 @@
+<idea-plugin>
+    <id>com.rubberduck.live</id>
+    <name>RubberDuck Live</name>
+    <vendor email="team@rubberduck.live" url="https://github.com/hack-kosice-2026">Hack Kosice 2026</vendor>
+
+    <description><![CDATA[
+    <h2>RubberDuck Live</h2>
+    <p>An AI pair-programmer that watches you think. Local-first IntelliJ plugin that:</p>
+    <ul>
+      <li>Generates unit tests for any function (right-click → <b>RubberDuck → Generate Tests</b>).</li>
+      <li>Suggests refactors with a native diff preview (right-click → <b>RubberDuck → Suggest Refactor</b>).</li>
+      <li>Detects when you're stuck (undo bursts, repeated test failures, long idle on errors) and asks a Socratic question.</li>
+    </ul>
+    <p>All traffic stays on <code>127.0.0.1</code>. Default LLM is local Ollama. See the companion
+    dashboard at <code>http://localhost:3000</code>.</p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <h3>0.1.0</h3>
+    <ul><li>Initial Phase 3 scaffold: event listeners, WS bridge, stuck detector, Socratic intervention, tool window, settings.</li></ul>
+    ]]></change-notes>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <resource-bundle>messages.RubberDuckBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Application services -->
+        <applicationService serviceImplementation="com.rubberduck.live.settings.RubberDuckSettings"/>
+        <applicationService serviceImplementation="com.rubberduck.live.detector.EventBus"/>
+        <applicationService serviceImplementation="com.rubberduck.live.net.BackendClient"/>
+        <applicationService serviceImplementation="com.rubberduck.live.net.EventsWebSocket"/>
+        <applicationService serviceImplementation="com.rubberduck.live.storage.EventLog"/>
+        <applicationService serviceImplementation="com.rubberduck.live.detector.SessionContext"/>
+        <applicationService serviceImplementation="com.rubberduck.live.detector.StuckDetector"/>
+        <applicationService serviceImplementation="com.rubberduck.live.intervention.StuckInterventionCoordinator"/>
+
+        <!-- Project startup -->
+        <postStartupActivity implementation="com.rubberduck.live.RubberDuckStartup"/>
+
+        <!-- Tool window -->
+        <toolWindow id="RubberDuck Live"
+                    anchor="right"
+                    icon="/META-INF/pluginIcon.svg"
+                    factoryClass="com.rubberduck.live.toolwindow.RubberDuckToolWindowFactory"/>
+
+        <!-- Notifications -->
+        <notificationGroup id="RubberDuck Live"
+                           displayType="BALLOON"
+                           isLogByDefault="true"/>
+
+        <!-- Settings -->
+        <applicationConfigurable parentId="tools"
+                                 id="com.rubberduck.live.settings"
+                                 displayName="RubberDuck Live"
+                                 instance="com.rubberduck.live.settings.RubberDuckConfigurable"/>
+    </extensions>
+
+    <actions>
+        <action id="com.rubberduck.live.GenerateTests"
+                class="com.rubberduck.live.actions.GenerateTestsAction"
+                text="RubberDuck: Generate Tests"
+                description="Generate unit tests for the function under caret via the local RubberDuck backend.">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.rubberduck.live.SuggestRefactor"
+                class="com.rubberduck.live.actions.SuggestRefactorAction"
+                text="RubberDuck: Suggest Refactor"
+                description="Ask RubberDuck for refactor suggestions; opens a diff viewer.">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.rubberduck.live.OpenDashboard"
+                class="com.rubberduck.live.actions.OpenDashboardAction"
+                text="RubberDuck: Open Dashboard"
+                description="Open the RubberDuck Live dashboard in a browser.">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

@@ -1,0 +1,110 @@
+# RubberDuck Live — Backend
+
+Local FastAPI backend for the **RubberDuck Live** IntelliJ plugin and Next.js
+dashboard. Serves four HTTP endpoints plus one WebSocket, binds loopback only
+(`127.0.0.1:8765`), and defaults to local [Ollama](https://ollama.ai).
+
+See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for the full contract.
+
+## What it provides
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET  /api/v1/health`             | Liveness + LLM probe (2 s timeout) |
+| `POST /api/v1/generate-tests`     | LLM-generated unit tests (pytest / JUnit5 / Jest) |
+| `POST /api/v1/suggest-refactor`   | Heuristic smell detection + LLM rewrite + unified diff |
+| `POST /api/v1/socratic-question`  | One Socratic question, ≤ 25 words |
+| `WS   /api/v1/events`             | Plugin pushes events; dashboards subscribe to the stream |
+
+## Install
+
+Requires Python ≥ 3.13.
+
+```bash
+cd backend
+# Either uv (recommended):
+uv sync
+# …or plain pip:
+pip install -e .
+```
+
+## Run
+
+```bash
+./run.sh
+# or, equivalently:
+uvicorn src.main:app --host 127.0.0.1 --port 8765 --reload
+```
+
+### Demo / mock mode
+
+```bash
+DEMO_MOCK=1 ./run.sh
+```
+
+All three AI endpoints return pre-canned responses from
+[`src/core/mock_fixtures.py`](src/core/mock_fixtures.py) — no LLM required. The
+fixtures are the exact shapes the demo script in
+[`docs/DEMO_SCRIPT.md`](../docs/DEMO_SCRIPT.md) relies on (fizzbuzz tests, the
+`analyze` refactor, the `undo_burst` Socratic question).
+
+## Environment variables
+
+Copy [`.env.example`](.env.example) to `.env` and edit. Highlights:
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `APP_HOST`         | `127.0.0.1`      | Always loopback. |
+| `APP_PORT`         | `8765`           | Architecture §10. |
+| `DEMO_MOCK`        | `0`              | Set to `1` for canned demo responses. |
+| `LLM_PROVIDER`     | `ollama`         | `ollama` \| `openai_compatible` \| `openai` |
+| `LLM_FALLBACK`     | `true`           | If primary fails, try others in order. |
+| `OLLAMA_BASE_URL`  | `http://127.0.0.1:11434` | |
+| `OLLAMA_MODEL`     | `qwen2.5-coder:7b`       | |
+| `OPENAI_BASE_URL`  | *(unset)*        | For LM Studio / vLLM / Together / Groq. |
+| `OPENAI_API_KEY`   | *(unset)*        | Required for OpenAI or OpenAI-compatible. |
+| `OPENAI_MODEL`     | `gpt-4o-mini`    | |
+| `RUBBERDUCK_TOKEN` | *(unset)*        | If set, clients must send `X-RubberDuck-Token`. |
+
+## Quick curl examples
+
+```bash
+# Health
+curl -s http://127.0.0.1:8765/api/v1/health | jq
+
+# Generate tests (mock mode)
+curl -s -X POST http://127.0.0.1:8765/api/v1/generate-tests \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "language": "python",
+        "code": "def fizzbuzz(n):\n    ...",
+        "function_name": "fizzbuzz",
+        "file_path": "demo/fizz.py"
+      }' | jq
+
+# Suggest refactor
+curl -s -X POST http://127.0.0.1:8765/api/v1/suggest-refactor \
+  -H 'Content-Type: application/json' \
+  -d '{"language":"python","code":"def analyze(xs):\n    ..."}' | jq
+
+# Socratic question
+curl -s -X POST http://127.0.0.1:8765/api/v1/socratic-question \
+  -H 'Content-Type: application/json' \
+  -d '{"stuck_reason":"undo_burst","current_code":"def rolling_sum(...):","recent_events":[]}' | jq
+```
+
+## WebSocket smoke test
+
+With the backend running:
+
+```bash
+python examples/websocket_client.py
+```
+
+## Privacy
+
+- Server binds to `127.0.0.1` only; CORS allows only `http://localhost:3000` and
+  `http://127.0.0.1:3000`.
+- No database; event ring buffer is per-process, in-memory, `maxlen=500` per
+  session.
+- The plugin is the durable store.
