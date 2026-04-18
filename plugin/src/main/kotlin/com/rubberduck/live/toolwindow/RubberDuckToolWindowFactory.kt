@@ -48,7 +48,16 @@ class RubberDuckToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val contentFactory = com.intellij.ui.content.ContentFactory.getInstance()
 
-        // Primary tab — embed the live Next.js dashboard via JCEF so the
+        // PRIMARY (leftmost) — full streaming chat UI backed by JCEF + the
+        // shared chat-webui bundle. The old Swing JTextPane chat has been
+        // retired; all code Q&A flows through here now.
+        val chatBrowserPanel = com.rubberduck.live.chat.ChatBrowserPanel(project)
+        com.intellij.openapi.util.Disposer.register(toolWindow.disposable, chatBrowserPanel)
+        val chatTab = contentFactory.createContent(chatBrowserPanel, "Chat", false)
+        chatTab.isCloseable = false
+        toolWindow.contentManager.addContent(chatTab)
+
+        // Secondary tab — embed the live Next.js dashboard via JCEF so the
         // tool window inherits the full wellness UI (heatmap, flow chart,
         // anti-patterns, stuck timeline) instead of plain Swing rows.
         if (DashboardBrowserPanel.isSupported()) {
@@ -58,13 +67,12 @@ class RubberDuckToolWindowFactory : ToolWindowFactory {
             toolWindow.contentManager.addContent(dashTab)
         }
 
-        // Secondary tab — the Chat panel (user asks questions about their
-        // code) plus a small llm/session breadcrumb and a collapsed "Recent
-        // events" strip for diagnostics. Also the fallback if JCEF is down.
-        val chatPanel = RubberDuckToolWindow.build(project)
-        val chatTab = contentFactory.createContent(chatPanel, "Chat", false)
-        chatTab.isCloseable = false
-        toolWindow.contentManager.addContent(chatTab)
+        // Legacy compact Q&A / diagnostics strip preserved as a fallback
+        // tab so the breadcrumb + recent-events list are still reachable.
+        val legacyPanel = RubberDuckToolWindow.build(project)
+        val legacyTab = contentFactory.createContent(legacyPanel, "Status", false)
+        legacyTab.isCloseable = false
+        toolWindow.contentManager.addContent(legacyTab)
 
         // Skills tab — list of markdown skills loaded from project `.skills/`.
         // Loader is project-scoped; it copies bundled seed skills on first
@@ -74,6 +82,9 @@ class RubberDuckToolWindowFactory : ToolWindowFactory {
         val skillsTab = contentFactory.createContent(skillsPanel, "Skills", false)
         skillsTab.isCloseable = false
         toolWindow.contentManager.addContent(skillsTab)
+
+        // Select Chat by default.
+        toolWindow.contentManager.setSelectedContent(chatTab)
     }
 }
 

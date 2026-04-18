@@ -30,6 +30,7 @@
         <fileIconProvider implementation="com.rubberduck.live.ui.AntiPatternIconProvider"/>
         <!-- Application services -->
         <applicationService serviceImplementation="com.rubberduck.live.settings.RubberDuckSettings"/>
+        <projectService serviceImplementation="com.rubberduck.live.chat.ChatPanelRegistry"/>
         <applicationService serviceImplementation="com.rubberduck.live.detector.EventBus"/>
         <applicationService serviceImplementation="com.rubberduck.live.net.BackendClient"/>
         <applicationService serviceImplementation="com.rubberduck.live.net.EventsWebSocket"/>
@@ -94,6 +95,57 @@
                 class="com.rubberduck.live.actions.ExplainOldCodeAction"
                 text="Explain This Code 🦆"
                 description="Get an AI explanation for the selected code">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <!-- Chat actions (Phase 4). All resolve to the ChatBrowserPanel
+             via ChatPanelRegistry; the Open action activates the tool
+             window, the rest forward a single `execContextAction(name)`
+             into the JCEF-hosted web UI — mirrors the action-forwarding
+             pattern used by the JetBrains Claude GUI reference. -->
+        <action id="rubberduck.chat.Open"
+                class="com.rubberduck.live.chat.actions.OpenChatAction"
+                text="Open RubberDuck Chat"
+                description="Open the RubberDuck chat tool window.">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="rubberduck.chat.NewChat"
+                class="com.rubberduck.live.chat.actions.ChatNewChatAction"
+                text="RubberDuck: New Chat"
+                description="Start a new chat session in the RubberDuck tool window.">
+            <keyboard-shortcut keymap="$default" first-keystroke="control alt shift N"/>
+        </action>
+
+        <action id="rubberduck.chat.FocusInput"
+                class="com.rubberduck.live.chat.actions.ChatFocusInputAction"
+                text="RubberDuck: Focus Chat Input"
+                description="Activate the RubberDuck chat and focus the input box.">
+            <keyboard-shortcut keymap="$default" first-keystroke="control alt shift K"/>
+        </action>
+
+        <action id="rubberduck.chat.Stop"
+                class="com.rubberduck.live.chat.actions.ChatStopGenerationAction"
+                text="RubberDuck: Stop Generation"
+                description="Abort the currently-streaming chat response."/>
+
+        <action id="rubberduck.chat.Clear"
+                class="com.rubberduck.live.chat.actions.ChatClearAction"
+                text="RubberDuck: Clear Chat"
+                description="Clear the current chat transcript."/>
+
+        <action id="rubberduck.chat.AttachSelection"
+                class="com.rubberduck.live.chat.actions.ChatAttachSelectionAction"
+                text="Attach Current Selection to RubberDuck Chat"
+                description="Attach the current editor selection as context in the RubberDuck chat.">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="rubberduck.chat.SendSelection"
+                class="com.rubberduck.live.chat.actions.ChatSendSelectionAction"
+                text="Ask RubberDuck About Selection"
+                description="Attach the current selection and ask RubberDuck to explain it.">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>

@@ -89,6 +89,24 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
             "Code Explainer",
             "Socratic Coach",
         )
+
+        // Phase 4 — embedded chat tool window. The JCEF-hosted web UI
+        // reads these via the `window.rubberduck.getConfig()` /
+        // `listModels()` bridge methods; the full Configurable UX
+        // lands in Step 7, but the fields exist here now so Step 6 can
+        // already wire context builders against them without a schema
+        // bump.
+        var chatEnabled: Boolean = true
+        var chatModel: String = "gpt-4o-mini"
+        var chatAvailableModels: MutableList<String> = mutableListOf(
+            "gpt-4o-mini",
+            "gpt-4o",
+            "claude-sonnet-4",
+            "ollama/llama3.1",
+        )
+        var chatMaxHistoryTokens: Int = 8000
+        var chatAttachOpenFiles: Boolean = false
+        var chatAttachDiagnostics: Boolean = false
     }
 
     private var state = State()
