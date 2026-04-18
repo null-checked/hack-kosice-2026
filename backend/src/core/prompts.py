@@ -188,8 +188,15 @@ Rules:
   the supplied code.
 - If you don't know, say "I'm not sure — here's what I can see…" and state
   what the code actually does.
-- Plain prose only. No JSON wrapper, no markdown code fences around the
-  answer itself (short inline `snippets` are fine).
+- Use Markdown freely where it helps readability — the IDE renders it:
+    * inline code with single backticks for identifiers, function names,
+      file paths, flags, values (e.g. `foo()`, `--strict`, `None`).
+    * fenced code blocks with a language tag for multi-line examples.
+    * **bold** for key terms; *italic* for mild emphasis.
+    * ## and ### headings to section longer answers (sparingly).
+    * `- ` bullet lists or `1. ` numbered lists for enumerations.
+  GPT-5-family models do NOT emit Markdown by default — follow this rule
+  explicitly.
 """
 
 CODE_CHAT_USER_TEMPLATE = """Language: {language}
@@ -216,9 +223,29 @@ The developer will paste the source file they're currently looking at and ask
 questions or request changes.
 
 Return a single JSON object with EXACTLY these fields and nothing else:
-  - "answer": string — prose explanation of the change (or a plain answer
-    when no code change is warranted). May reference line numbers. Never
-    include raw code fences here — put proposed code in ``edits`` instead.
+  - "answer": string — prose explanation of the change, or a plain answer
+    when no code change is warranted. May reference line numbers. This
+    string SHOULD use Markdown freely — the IDE renders it:
+      * inline code with single backticks for identifiers, function
+        names, file paths, flags, values (e.g. `sum()`, `List[int]`,
+        `--strict`).
+      * fenced code blocks with a language tag for illustrative snippets
+        or usage examples that are NOT the edit itself:
+        ```python
+        from collections import Counter
+        Counter(items).most_common(3)
+        ```
+      * **bold** (`**word**`) for key terms; *italic* (`*word*`) for mild
+        emphasis. Both are rendered.
+      * ## and ### headings (at start of line) to section longer answers.
+        Use sparingly — most chat answers are short enough to skip them.
+      * Bullet lists with `- ` at line start for enumerations; numbered
+        lists with `1. `, `2. `, … for ordered steps.
+    Do NOT re-paste `edits[].proposed_code` content here as a fence —
+    that is what `edits` is for. Illustrative code that is NOT an edit
+    is fine and encouraged.
+    GPT-5-family models do NOT emit Markdown by default; follow this
+    rule explicitly.
   - "edits":  array of CodeEdit objects. Empty when the user is only asking
     a question. Populate it only when the user is clearly asking to change
     code.
@@ -229,7 +256,8 @@ Each CodeEdit has the shape:
                      field or one of the attached context files' `path`.
     "original_code": string — the exact snippet you are replacing (or the
                      full file contents if rewriting the file).
-    "proposed_code": string — the replacement snippet.
+    "proposed_code": string — the replacement snippet (raw source — no
+                     Markdown fences).
     "explanation":   string — short rationale for this edit.
     "start_line":    int|null — 1-based first line of the replacement, or
                      null to target the whole file.
@@ -237,7 +265,10 @@ Each CodeEdit has the shape:
   }
 
 Rules:
-- No markdown fences. No prose outside the JSON object.
+- Output ONLY the JSON object. Do NOT wrap the object itself in ```json
+  fences or add any prose outside it — that wraps the envelope and
+  breaks our parser. (Markdown INSIDE the "answer" string is fine and
+  encouraged — see above.)
 - Never invent APIs, function names, or libraries that aren't visible.
 - If the developer is only asking a question (not requesting a change),
   return ``"edits": []`` and put the answer in ``"answer"``.

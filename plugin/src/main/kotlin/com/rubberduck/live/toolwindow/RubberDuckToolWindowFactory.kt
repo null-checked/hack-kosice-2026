@@ -48,6 +48,7 @@ import javax.swing.DefaultListModel
 import javax.swing.JButton
 import javax.swing.JList
 import javax.swing.JPanel
+import javax.swing.Scrollable
 
 /**
  * Two-tab tool window: a JCEF-embedded Next.js dashboard for live wellness
@@ -101,10 +102,27 @@ object RubberDuckToolWindow {
     // more `CodeEdit` cards (rendered inside `AssistantMessageComponent`).
     // Users can `@`-mention project files to attach their contents as
     // `context_files` on the outgoing request.
-    private val transcriptPanel = JPanel().apply {
-        layout = BoxLayout(this, BoxLayout.Y_AXIS)
-        isOpaque = true
-        border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
+    /**
+     * `BoxLayout.Y_AXIS` container that stacks chat turns. Implements
+     * [Scrollable] so the enclosing [JBScrollPane] forces our width to match
+     * the viewport — without that, a long line in one turn would make the
+     * panel wider than the viewport and the scroll pane would show a
+     * horizontal scrollbar, clipping chat content off-screen. With
+     * `getScrollableTracksViewportWidth() = true`, the panel is capped at
+     * viewport width and individual turns word-wrap inside it.
+     */
+    private val transcriptPanel = object : JPanel(), Scrollable {
+        init {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            isOpaque = true
+            border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
+        }
+
+        override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+        override fun getScrollableUnitIncrement(visibleRect: Rectangle?, orientation: Int, direction: Int): Int = 16
+        override fun getScrollableBlockIncrement(visibleRect: Rectangle?, orientation: Int, direction: Int): Int = 64
+        override fun getScrollableTracksViewportWidth(): Boolean = true
+        override fun getScrollableTracksViewportHeight(): Boolean = false
     }
     private val transcriptScroll = JBScrollPane(transcriptPanel).apply {
         preferredSize = Dimension(260, 260)
