@@ -15,6 +15,8 @@ import com.rubberduck.live.model.DeveloperEvent
 import com.rubberduck.live.net.BackendClient
 import com.rubberduck.live.net.EventsWebSocket
 import com.rubberduck.live.settings.RubberDuckSettings
+import com.rubberduck.live.skills.SkillsLoader
+import com.rubberduck.live.ui.SkillsToolWindowPanel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,6 +65,15 @@ class RubberDuckToolWindowFactory : ToolWindowFactory {
         val chatTab = contentFactory.createContent(chatPanel, "Chat", false)
         chatTab.isCloseable = false
         toolWindow.contentManager.addContent(chatTab)
+
+        // Skills tab — list of markdown skills loaded from project `.skills/`.
+        // Loader is project-scoped; it copies bundled seed skills on first
+        // run and watches the directory for edits so the list stays fresh.
+        val skillsLoader = SkillsLoader(project, SkillsLoader.getDefaultSkillsDir(project))
+        val skillsPanel = SkillsToolWindowPanel(project, skillsLoader)
+        val skillsTab = contentFactory.createContent(skillsPanel, "Skills", false)
+        skillsTab.isCloseable = false
+        toolWindow.contentManager.addContent(skillsTab)
     }
 }
 

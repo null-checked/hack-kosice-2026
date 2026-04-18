@@ -77,6 +77,18 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
         // actually reliable — an off-by-default toggle made users conclude
         // the feature didn't exist. Opt-out in Settings → Tools → RubberDuck.
         var enableInlineCompletion: Boolean = true
+        // Phase 9.C — markdown-based Skills system. Project-scoped skills
+        // live under `$projectDir/<skillsDirectory>/<skill>/SKILL.md` and
+        // are loaded at runtime by `SkillsLoader`. `enabledSkills` stores
+        // the skill `name:` frontmatter field for each skill the user has
+        // toggled on in Settings → Tools → RubberDuck Live — Skills.
+        var skillsDirectory: String = ".skills"
+        var enabledSkills: MutableSet<String> = mutableSetOf(
+            "Test Generator",
+            "Refactor Suggester",
+            "Code Explainer",
+            "Socratic Coach",
+        )
     }
 
     private var state = State()

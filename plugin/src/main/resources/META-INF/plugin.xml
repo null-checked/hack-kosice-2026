@@ -57,6 +57,10 @@
                                  id="com.rubberduck.live.settings"
                                  displayName="RubberDuck Live"
                                  instance="com.rubberduck.live.settings.RubberDuckConfigurable"/>
+        <projectConfigurable parentId="tools"
+                             instance="com.rubberduck.live.settings.SkillsConfigurable"
+                             id="com.rubberduck.live.settings.SkillsConfigurable"
+                             displayName="RubberDuck Live — Skills"/>
 
         <!-- Inline completion (Tier C) -->
         <inline.completion.provider
