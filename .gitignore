@@ -1,1 +1,41 @@
-﻿.idea
+﻿# ---- OS / editor ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+!**/.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Kotlin / Gradle / IntelliJ plugin ----
+plugin/build/
+plugin/.gradle/
+plugin/.intellijPlatform/
+plugin/.kotlin/
+plugin/out/
+.gradle/
+
+# ---- Misc runtime ----
+*.log
+/tmp/

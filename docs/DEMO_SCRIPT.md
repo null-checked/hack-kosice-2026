@@ -189,3 +189,23 @@ Put these in the demo project **before** judging:
 5. **Dashboard seed file**: `dashboard/public/seed-events.json` containing ~200 synthetic events covering the last 24 h so the heatmap never looks empty.
 
 If all fails, P1 narrates over the GIFs and sells the architecture diagram. The three pillars are still coherent without a live LLM.
+
+---
+
+## Pre-flight checklist (5 minutes before judging)
+
+Run this *in order*. If any step fails, fix it or fall back to mock mode
+before the judges arrive. The automation for steps 1–8 is available as
+[`scripts/demo-preflight.sh`](../scripts/demo-preflight.sh) via
+`make demo-preflight`.
+
+1. **Ollama model present** — `ollama list | grep qwen2.5-coder:7b`
+2. **Ollama daemon reachable** — `curl -fsS http://127.0.0.1:11434/api/tags`
+3. **`make demo-preflight` passes all 10 checks** (ports free, zip present, deps installed, git clean).
+4. **`make dev-live` starts without errors** — leave it running; watch the first 5 s of output.
+5. **Browser at `http://localhost:3000`** shows the green **"Live"** pill in the top-right of the Hero.
+6. **IntelliJ tool window "RubberDuck Live"** shows a green connection dot (right-edge panel, pre-opened).
+7. **Right-click works** on the `fizzbuzz` function in `demo/fizz.py` → *RubberDuck* submenu is visible with both actions.
+8. **Undo 4× quickly** on `demo/stuck.py` (cursor on the `total -= xs[i - k]` line) → balloon appears within ~1 s.
+9. **Screen recorder armed** (OBS / QuickTime) with a pre-set 1600×1000 frame. Test the shortcut.
+10. **Water bottle. Deep breath. Go.**

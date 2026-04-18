@@ -61,7 +61,11 @@ class EditorActivityListener(private val project: Project) {
     /** Install the listeners on the application-wide editor factory + command bus. */
     fun install(parent: com.intellij.openapi.Disposable) {
         EditorFactory.getInstance().eventMulticaster.addDocumentListener(docListener, parent)
-        com.intellij.openapi.command.CommandProcessor.getInstance().addCommandListener(commandListener, parent)
+        // CommandProcessor exposes only the single-arg addCommandListener; subscribe via
+        // the application message bus so disposal is handled by [parent].
+        val bus = com.intellij.openapi.application.ApplicationManager.getApplication()
+            .messageBus.connect(parent)
+        bus.subscribe(com.intellij.openapi.command.CommandListener.TOPIC, commandListener)
     }
 
     private fun guessLanguage(ext: String?): String? = when (ext?.lowercase()) {

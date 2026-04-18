@@ -24,6 +24,7 @@ dependencies {
             providers.gradleProperty("platformVersion"),
         )
         bundledPlugin("com.intellij.java")
+        instrumentationTools()
         pluginVerifier()
         zipSigner()
         testFramework(TestFrameworkType.Platform)
