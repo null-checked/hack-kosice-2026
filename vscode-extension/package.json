@@ -19,18 +19,31 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "rubberduck.generateTests",   "title": "🦆 RubberDuck: Generate Tests" },
-      { "command": "rubberduck.suggestRefactor", "title": "🦆 RubberDuck: Suggest Refactor" },
-      { "command": "rubberduck.openDashboard",   "title": "🦆 RubberDuck: Open Dashboard (browser)" },
-      { "command": "rubberduck.testConnection",  "title": "🦆 RubberDuck: Test Connection" },
-      { "command": "rubberDuck.showDashboard",   "title": "🦆 RubberDuck: Show Dashboard (in editor)" },
-      { "command": "rubberDuck.explainOldCode",  "title": "🦆 RubberDuck: Explain Old Code" }
+      { "command": "rubberduck.generateTests",           "title": "🦆 RubberDuck: Generate Tests" },
+      { "command": "rubberduck.suggestRefactor",         "title": "🦆 RubberDuck: Suggest Refactor" },
+      { "command": "rubberduck.openDashboard",           "title": "🦆 RubberDuck: Open Dashboard (browser)" },
+      { "command": "rubberduck.testConnection",          "title": "🦆 RubberDuck: Test Connection" },
+      { "command": "rubberDuck.showDashboard",           "title": "🦆 RubberDuck: Show Dashboard (in editor)" },
+      { "command": "rubberDuck.explainOldCode",          "title": "🦆 RubberDuck: Explain Old Code" },
+      { "command": "rubberduck.chat.open",               "title": "🦆 RubberDuck: Open Chat",               "category": "RubberDuck" },
+      { "command": "rubberduck.chat.newChat",            "title": "🦆 RubberDuck: New Chat",                "category": "RubberDuck" },
+      { "command": "rubberduck.chat.focus",              "title": "🦆 RubberDuck: Focus Chat Input",        "category": "RubberDuck" },
+      { "command": "rubberduck.chat.stop",               "title": "🦆 RubberDuck: Stop Generation",         "category": "RubberDuck" },
+      { "command": "rubberduck.chat.clear",              "title": "🦆 RubberDuck: Clear Chat",              "category": "RubberDuck" },
+      { "command": "rubberduck.chat.attachSelection",    "title": "🦆 RubberDuck: Attach Selection to Chat","category": "RubberDuck" },
+      { "command": "rubberduck.chat.sendSelection",      "title": "🦆 RubberDuck: Ask About Selection",     "category": "RubberDuck" }
+    ],
+    "keybindings": [
+      { "command": "rubberduck.chat.newChat", "key": "ctrl+alt+shift+n", "mac": "cmd+alt+shift+n", "when": "focusedView == rubberduck.chat" },
+      { "command": "rubberduck.chat.focus",   "key": "ctrl+alt+shift+k", "mac": "cmd+alt+shift+k" }
     ],
     "menus": {
       "editor/context": [
-        { "command": "rubberduck.generateTests",   "group": "rubberduck@1", "when": "editorHasSelection || editorTextFocus" },
-        { "command": "rubberduck.suggestRefactor", "group": "rubberduck@2", "when": "editorTextFocus" },
-        { "command": "rubberDuck.explainOldCode",  "group": "rubberduck@3", "when": "editorTextFocus" }
+        { "command": "rubberduck.generateTests",        "group": "rubberduck@1", "when": "editorHasSelection || editorTextFocus" },
+        { "command": "rubberduck.suggestRefactor",      "group": "rubberduck@2", "when": "editorTextFocus" },
+        { "command": "rubberDuck.explainOldCode",       "group": "rubberduck@3", "when": "editorTextFocus" },
+        { "command": "rubberduck.chat.attachSelection", "group": "rubberduck@4", "when": "editorHasSelection" },
+        { "command": "rubberduck.chat.sendSelection",   "group": "rubberduck@5", "when": "editorHasSelection" }
       ]
     },
     "configuration": {
@@ -66,6 +79,37 @@
           "type": "boolean",
           "default": true,
           "description": "Enable AI ghost-text completion (calls POST /api/v1/complete). Disable to silence inline suggestions."
+        },
+        "rubberduck.backendBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765/api/v1",
+          "description": "Base URL used by the chat web UI for its direct SSE fetch to the backend."
+        },
+        "rubberduck.chatModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Default model pre-selected in the chat composer."
+        },
+        "rubberduck.chatAvailableModels": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["gpt-4o-mini", "gpt-4o", "claude-sonnet-4", "ollama/llama3.1"],
+          "description": "Models offered in the chat model picker."
+        },
+        "rubberduck.chatMaxHistoryTokens": {
+          "type": "integer",
+          "default": 8000,
+          "description": "Soft cap on how many tokens of chat history are kept in flight."
+        },
+        "rubberduck.chatAttachOpenFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-attach the list of open files to every chat turn."
+        },
+        "rubberduck.chatAttachDiagnostics": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-attach current diagnostics to every chat turn."
         }
       }
     },
@@ -76,7 +120,7 @@
     },
     "views": {
       "rubberduck-live": [
-        { "id": "rubberduck.chat",      "name": "Chat",         "type": "webview" },
+        { "id": "rubberduck.chat",      "name": "Chat",         "type": "webview", "contextualTitle": "RubberDuck Chat", "visibility": "visible" },
         { "id": "rubberduck.dashboard", "name": "Dashboard",    "type": "webview" },
         { "id": "rubberduck.events",    "name": "Recent Events" },
         { "id": "rubberduck.socratic",  "name": "Socratic Feed" }
