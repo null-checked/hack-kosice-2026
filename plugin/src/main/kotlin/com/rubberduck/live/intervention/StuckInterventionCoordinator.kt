@@ -20,6 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.UUID
 
 /**
@@ -68,12 +71,18 @@ class StuckInterventionCoordinator {
         // that doesn't require sending code to the backend.
         if (settings.privacyMode) {
             ApplicationManager.getApplication().invokeLater {
+                val stockQuestion =
+                    "Take a breath. State the invariant out loud. (Strict privacy is on — no code sent.)"
                 SocraticNotifier.showInfo(
                     project,
                     "🦆 RubberDuck noticed a $stuckReason pattern",
-                    "Take a breath. State the invariant out loud. (Strict privacy is on — no code sent.)",
+                    stockQuestion,
                 )
-                emitShown(interventionId)
+                emitShown(
+                    interventionId,
+                    stuckReason,
+                    SocraticResponse(question = stockQuestion, follow_ups = emptyList(), confidence = 0.0),
+                )
             }
             return
         }
@@ -109,18 +118,30 @@ class StuckInterventionCoordinator {
                 "🦆 RubberDuck asks…",
                 response.question,
             )
-            emitShown(interventionId)
+            emitShown(interventionId, stuckReason, response)
         }
     }
 
-    private fun emitShown(interventionId: String) {
-        EventEmitter.emit(
-            EventType.INTERVENTION_SHOWN,
-            payload = EventEmitter.json(
-                "intervention_id" to interventionId,
-                "kind" to "socratic",
-            ),
-        )
+    private fun emitShown(
+        interventionId: String,
+        stuckReason: String,
+        response: SocraticResponse,
+    ) {
+        // Dashboard's SocraticFeed panel reads `question` and `follow_ups`
+        // directly from the INTERVENTION_SHOWN payload. Without them it
+        // falls back to "…" which looks like a spinner — include the full
+        // Socratic response so the feed renders the question text.
+        val payload: Map<String, JsonElement> = buildMap {
+            put("intervention_id", JsonPrimitive(interventionId))
+            put("kind", JsonPrimitive("socratic"))
+            put("rule", JsonPrimitive(stuckReason))
+            put("question", JsonPrimitive(response.question))
+            put("confidence", JsonPrimitive(response.confidence))
+            if (response.follow_ups.isNotEmpty()) {
+                put("follow_ups", JsonArray(response.follow_ups.map { JsonPrimitive(it) }))
+            }
+        }
+        EventEmitter.emit(EventType.INTERVENTION_SHOWN, payload = payload)
     }
 
     private fun globalThrottleMs(): Long {

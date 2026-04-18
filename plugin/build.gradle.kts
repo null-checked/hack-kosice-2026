@@ -94,16 +94,31 @@ tasks {
     }
 
     // Improve the dev loop:
-    //  - Auto-reload the plugin without restarting the sandbox IDE (the
-    //    `idea.auto.reload.plugins` flag + the `@Service` and `dynamic`
-    //    extension points we already use let IntelliJ hot-swap our plugin
-    //    when `./gradlew prepareSandbox` runs while the sandbox is open).
+    //  - Auto-reload the plugin without restarting the sandbox IDE.
     //  - Auto-open the repo root so the user doesn't have to click through
     //    "Open project…" every time the sandbox boots.
+    //  - **Single source of truth for host/port**: read `backend/.env` at
+    //    configure time and pass APP_HOST / APP_PORT / DASHBOARD_PORT as
+    //    `-Drubberduck.*` system properties. The plugin's
+    //    `RubberDuckSettings.defaultBackendUrl()` picks them up on first run
+    //    so we never have to hardcode a port in Kotlin code again — change
+    //    `backend/.env` and the plugin default moves with it.
     runIde {
         systemProperty("idea.auto.reload.plugins", "true")
-        // Open the hack-kosice-2026 workspace directly. `projectDir` is
-        // plugin/, its parent is the repo root — the project the user wants.
         args = listOf(project.projectDir.parentFile.absolutePath)
+
+        val envFile = project.projectDir.parentFile.resolve("backend/.env")
+        fun readEnv(key: String, fallback: String): String {
+            if (!envFile.exists()) return fallback
+            val match = envFile.readLines()
+                .firstOrNull { it.trimStart().startsWith("$key=") }
+                ?: return fallback
+            return match.substringAfter("=").trim().trim('"', '\'').ifEmpty { fallback }
+        }
+        val backendHost = readEnv("APP_HOST", "127.0.0.1")
+        val backendPort = readEnv("APP_PORT", "8765")
+        val dashboardPort = readEnv("DASHBOARD_PORT", "3000")
+        systemProperty("rubberduck.backend.url", "http://$backendHost:$backendPort")
+        systemProperty("rubberduck.dashboard.url", "http://localhost:$dashboardPort")
     }
 }

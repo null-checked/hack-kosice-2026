@@ -6,7 +6,12 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefClient
 import com.rubberduck.live.settings.RubberDuckSettings
+import org.cef.CefApp
+import org.cef.browser.CefBrowser
+import org.cef.browser.CefFrame
+import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -16,9 +21,15 @@ import javax.swing.JPanel
 
 /**
  * JCEF-backed dashboard view for the tool window. Embeds the Next.js dashboard
- * running at `http://localhost:3000` so the in-IDE tool window renders the
- * exact same visuals (wellness score, heatmap, flow-state chart, anti-patterns,
- * stuck timeline, socratic feed) instead of a plain Swing list.
+ * running at the URL configured in [RubberDuckSettings] so the in-IDE tool
+ * window renders the exact same visuals (wellness score, heatmap, flow-state
+ * chart, anti-patterns, stuck timeline, socratic feed) instead of a plain
+ * Swing list.
+ *
+ * Uses **off-screen rendering (OSR)** — historically more reliable than the
+ * windowed (native HWND) mode inside dockable tool windows on Windows, where
+ * windowed JCEF frequently ends up with a blank area due to z-order / repaint
+ * quirks of the embedded native child window.
  *
  * Gracefully degrades: if [JBCefApp.isSupported] returns false (rare on CE
  * 2024.2+ but possible on older JBR builds), callers fall back to the plain
@@ -27,8 +38,11 @@ import javax.swing.JPanel
 class DashboardBrowserPanel(parentDisposable: Disposable) : JPanel(BorderLayout()), Disposable {
 
     private val log = Logger.getInstance(DashboardBrowserPanel::class.java)
+
     private val browser: JBCefBrowser = JBCefBrowser.createBuilder()
-        .setOffScreenRendering(false)
+        // OSR=true avoids the native-HWND z-order / repaint bug inside
+        // dockable tool windows that keeps the dashboard area blank.
+        .setOffScreenRendering(true)
         .build()
 
     private val statusLabel = JBLabel(" ")
@@ -37,12 +51,34 @@ class DashboardBrowserPanel(parentDisposable: Disposable) : JPanel(BorderLayout(
         Disposer.register(parentDisposable, this)
         Disposer.register(this, browser)
 
+        // Surface load errors + success in the status strip so it's obvious
+        // when the backend is down vs the dashboard is blank.
+        browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+            override fun onLoadEnd(b: CefBrowser?, frame: CefFrame?, httpStatusCode: Int) {
+                if (frame?.isMain == true) {
+                    log.info("Dashboard loaded (HTTP $httpStatusCode): ${dashboardUrl()}")
+                    statusLabel.text = "${dashboardUrl()}  (HTTP $httpStatusCode)"
+                }
+            }
+
+            override fun onLoadError(
+                b: CefBrowser?,
+                frame: CefFrame?,
+                errorCode: org.cef.handler.CefLoadHandler.ErrorCode?,
+                errorText: String?,
+                failedUrl: String?,
+            ) {
+                if (frame?.isMain == true) {
+                    log.warn("Dashboard load failed: $failedUrl — $errorCode / $errorText")
+                    statusLabel.text = "load failed — $errorCode"
+                }
+            }
+        }, browser.cefBrowser)
+
         border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
 
-        // Slim top strip: plugin-side connection hint + reload button. The
-        // actual "wellness" visuals come from the embedded dashboard below.
         val topStrip = JPanel(FlowLayout(FlowLayout.LEFT, 6, 2))
-        statusLabel.text = "Loading dashboard from " + dashboardUrl() + "…"
+        statusLabel.text = "Loading " + dashboardUrl() + " …"
         topStrip.add(statusLabel)
         val reloadBtn = JButton("Reload")
         reloadBtn.addActionListener { loadDashboard() }
@@ -52,6 +88,13 @@ class DashboardBrowserPanel(parentDisposable: Disposable) : JPanel(BorderLayout(
             com.intellij.ide.BrowserUtil.browse(dashboardUrl())
         }
         topStrip.add(openInBrowserBtn)
+        val devToolsBtn = JButton("DevTools")
+        devToolsBtn.toolTipText = "Open Chromium DevTools against the embedded dashboard"
+        devToolsBtn.addActionListener {
+            runCatching { browser.openDevtools() }
+                .onFailure { log.warn("Failed to open DevTools: ${it.message}") }
+        }
+        topStrip.add(devToolsBtn)
 
         add(topStrip, BorderLayout.NORTH)
 
@@ -62,25 +105,14 @@ class DashboardBrowserPanel(parentDisposable: Disposable) : JPanel(BorderLayout(
         loadDashboard()
     }
 
-    private fun dashboardUrl(): String {
-        // The dashboard URL is derived from the backend URL's origin — they
-        // run on the same host, but on different ports (3000 vs 8765). We
-        // only override the port; host comes from settings so SSH-forwarded
-        // setups still work.
-        val backend = RubberDuckSettings.getInstance().backendUrl
-        val host = runCatching {
-            val u = java.net.URI(backend)
-            u.host ?: "localhost"
-        }.getOrDefault("localhost")
-        return "http://$host:3000"
-    }
+    private fun dashboardUrl(): String =
+        RubberDuckSettings.getInstance().dashboardUrl
 
     private fun loadDashboard() {
         val url = dashboardUrl()
         statusLabel.text = "Loading $url …"
-        log.info("Loading RubberDuck dashboard in JCEF: $url")
+        log.info("Loading RubberDuck dashboard in JCEF (OSR): $url")
         browser.loadURL(url)
-        statusLabel.text = url
     }
 
     override fun dispose() {

@@ -118,10 +118,17 @@ check-plugin:
 	@printf "$(C_BOLD)[3/3] plugin · gradle buildPlugin + test$(C_RESET)\n"
 	@cd plugin && ./gradlew -q buildPlugin test && printf "$(C_GREEN)    ✓ plugin built + tests$(C_RESET)\n"
 
+# Derive ports from backend/.env so one place controls everything. Fall back
+# to 8765/3000 if the file isn't present or the vars aren't set.
+BACKEND_PORT := $(shell grep -E '^APP_PORT=' backend/.env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' ')
+BACKEND_PORT := $(if $(BACKEND_PORT),$(BACKEND_PORT),8765)
+DASHBOARD_PORT := $(shell grep -E '^DASHBOARD_PORT=' backend/.env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' ')
+DASHBOARD_PORT := $(if $(DASHBOARD_PORT),$(DASHBOARD_PORT),3000)
+
 ## stop — free demo ports (cross-platform via scripts/kill_port.py)
 stop:
-	@python scripts/kill_port.py 8765 3000
-	@printf "$(C_GREEN)✓ stopped$(C_RESET)\n"
+	@python scripts/kill_port.py $(BACKEND_PORT) $(DASHBOARD_PORT)
+	@printf "$(C_GREEN)✓ stopped$(BACKEND_PORT)/$(DASHBOARD_PORT)$(C_RESET)\n"
 
 ## clean — wipe build artefacts
 clean:

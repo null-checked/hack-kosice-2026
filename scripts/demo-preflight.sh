@@ -43,7 +43,19 @@ warn_if() {
   fi
 }
 
-printf "%s🦆 RubberDuck Live — demo pre-flight%s\n\n" "$c_bold" "$c_reset"
+# Source backend/.env for APP_PORT / APP_HOST / DASHBOARD_PORT so preflight
+# checks agree with the actual runtime config.
+if [ -f backend/.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . backend/.env
+  set +a
+fi
+BACKEND_PORT="${APP_PORT:-8765}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
+
+printf "%s🦆 RubberDuck Live — demo pre-flight%s (backend=:%s dashboard=:%s)\n\n" \
+  "$c_bold" "$c_reset" "$BACKEND_PORT" "$DASHBOARD_PORT"
 
 # 1-3. LLM provider ready. OpenAI (default) is the PRIMARY gate; Ollama is
 #      accepted as an alternative so teams demoing the offline path still
@@ -86,11 +98,13 @@ else
     bash -c 'ollama list 2>/dev/null | grep -q "qwen2.5-coder:7b"'
 fi
 
-# 4. Port 8765 free (cross-platform via scripts/kill_port.py --check).
-check "Port 8765 free for backend" bash -c '! python scripts/kill_port.py --check 8765'
+# 4. Port $BACKEND_PORT free (cross-platform via scripts/kill_port.py --check).
+check "Port $BACKEND_PORT free for backend" \
+  bash -c "! python scripts/kill_port.py --check $BACKEND_PORT"
 
-# 5. Port 3000 free
-check "Port 3000 free for dashboard" bash -c '! python scripts/kill_port.py --check 3000'
+# 5. Port $DASHBOARD_PORT free
+check "Port $DASHBOARD_PORT free for dashboard" \
+  bash -c "! python scripts/kill_port.py --check $DASHBOARD_PORT"
 
 # 6. Plugin zip present
 check "Plugin zip built (plugin/build/distributions/*.zip)" \

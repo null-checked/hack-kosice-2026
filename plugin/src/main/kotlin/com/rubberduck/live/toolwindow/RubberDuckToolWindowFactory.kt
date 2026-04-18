@@ -56,12 +56,13 @@ class RubberDuckToolWindowFactory : ToolWindowFactory {
             toolWindow.contentManager.addContent(dashTab)
         }
 
-        // Secondary tab — plugin-side status + raw event stream + last
-        // Socratic question. Stays as the fallback if JCEF is unavailable.
-        val statusPanel = RubberDuckToolWindow.build(project)
-        val statusTab = contentFactory.createContent(statusPanel, "Status", false)
-        statusTab.isCloseable = false
-        toolWindow.contentManager.addContent(statusTab)
+        // Secondary tab — the Chat panel (user asks questions about their
+        // code) plus a small llm/session breadcrumb and a collapsed "Recent
+        // events" strip for diagnostics. Also the fallback if JCEF is down.
+        val chatPanel = RubberDuckToolWindow.build(project)
+        val chatTab = contentFactory.createContent(chatPanel, "Chat", false)
+        chatTab.isCloseable = false
+        toolWindow.contentManager.addContent(chatTab)
     }
 }
 
@@ -70,9 +71,8 @@ object RubberDuckToolWindow {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val eventsModel = DefaultListModel<String>()
-    private val statusLabel = JBLabel("● disconnected")
-    private val sessionLabel = JBLabel("session: (not started)")
-    private val providerLabel = JBLabel("llm: unknown")
+    /** Single compact breadcrumb at the top of the tab: llm + session + mode. */
+    private val breadcrumb = JBLabel("<html>&middot; connecting…</html>")
 
     // ---- Code Q&A chat panel -----------------------------------------------
     // v0.3: chat is no longer seeded by stuck moments. It's always available
@@ -99,36 +99,18 @@ object RubberDuckToolWindow {
 
     fun build(project: Project): JPanel {
         currentProject.set(project)
-        val root = JPanel(BorderLayout(8, 8))
-        root.border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
+        val root = JPanel(BorderLayout(6, 6))
+        root.border = BorderFactory.createEmptyBorder(6, 8, 8, 8)
 
-        // -- Status section ---------------------------------------------------
-        val status = JPanel(GridLayout(0, 1, 4, 4))
-        status.border = BorderFactory.createTitledBorder("Status")
-        status.add(statusLabel)
-        status.add(sessionLabel)
-        status.add(providerLabel)
-        val dashBtn = JButton("Open Dashboard")
-        dashBtn.addActionListener { com.intellij.ide.BrowserUtil.browse("http://localhost:3000") }
-        val btnRow = JPanel(FlowLayout(FlowLayout.LEFT))
-        btnRow.add(dashBtn)
-        status.add(btnRow)
+        // -- Top breadcrumb: llm / session / mode in one short line ----------
+        val breadcrumbBar = JPanel(BorderLayout())
+        breadcrumbBar.add(breadcrumb, BorderLayout.WEST)
 
-        // -- Events section ---------------------------------------------------
-        val events = JPanel(BorderLayout())
-        events.border = BorderFactory.createTitledBorder("Recent events")
-        val list = JList(eventsModel)
-        val scroll = JBScrollPane(list)
-        scroll.preferredSize = Dimension(260, 220)
-        events.add(scroll, BorderLayout.CENTER)
-
-        // -- Chat section (general-purpose code Q&A) -------------------------
-        val socratic = JPanel(BorderLayout(4, 4))
-        socratic.border = BorderFactory.createTitledBorder("Chat")
-
+        // -- Chat panel (primary, CENTER) ------------------------------------
+        val chat = JPanel(BorderLayout(4, 4))
         val transcriptScroll = JBScrollPane(transcriptPane)
-        transcriptScroll.preferredSize = Dimension(260, 200)
-        socratic.add(transcriptScroll, BorderLayout.CENTER)
+        transcriptScroll.preferredSize = Dimension(260, 260)
+        chat.add(transcriptScroll, BorderLayout.CENTER)
 
         val inputRow = JPanel(BorderLayout(4, 4))
         inputRow.add(inputField, BorderLayout.CENTER)
@@ -139,20 +121,25 @@ object RubberDuckToolWindow {
         val bottomCol = JPanel(GridLayout(0, 1, 0, 2))
         bottomCol.add(coachHintLabel)
         bottomCol.add(inputRow)
-        socratic.add(bottomCol, BorderLayout.SOUTH)
+        chat.add(bottomCol, BorderLayout.SOUTH)
 
         sendButton.addActionListener { sendReply() }
         inputField.addActionListener { sendReply() }        // Enter key
         clearButton.addActionListener { clearConversation() }
         updateInputEnablement()
 
-        val top = JPanel(GridLayout(0, 1, 8, 8))
-        top.add(status)
-        top.add(events)
-        root.add(top, BorderLayout.CENTER)
-        root.add(socratic, BorderLayout.SOUTH)
+        // -- Collapsed "Recent events" strip at the bottom for diagnostics ---
+        val events = JPanel(BorderLayout())
+        events.border = BorderFactory.createTitledBorder("Recent events")
+        val list = JList(eventsModel)
+        val scroll = JBScrollPane(list)
+        scroll.preferredSize = Dimension(260, 110)
+        events.add(scroll, BorderLayout.CENTER)
 
-        sessionLabel.text = "session: ${SessionContext.getInstance().sessionId}"
+        root.add(breadcrumbBar, BorderLayout.NORTH)
+        root.add(chat, BorderLayout.CENTER)
+        root.add(events, BorderLayout.SOUTH)
+
         renderTranscript()
         startBackgroundUpdaters()
         return root
@@ -177,21 +164,24 @@ object RubberDuckToolWindow {
         while (true) {
             val client = BackendClient.getInstance()
             val result = runCatching { client.health() }
-            val ws = EventsWebSocket.getInstance().isConnected
+            val wsOk = EventsWebSocket.getInstance().isConnected
+            val shortSession = SessionContext.getInstance().sessionId.take(8)
             ApplicationManager.getApplication().invokeLater {
                 result.onSuccess { h ->
                     val s = RubberDuckSettings.getInstance().state
                     s.lastSeenLlmProvider = h.llm_provider
                     s.lastSeenLlmModel = h.llm_model
                     s.demoMockDisplay = h.demo_mock
-                    statusLabel.text = if (ws)
-                        "● <font color='green'>connected</font>   (HTTP ok, WS ok)"
-                    else
-                        "● HTTP ok, WS reconnecting"
-                    providerLabel.text = "llm: ${h.llm_provider} / ${h.llm_model}" + if (h.demo_mock) "  [DEMO_MOCK]" else ""
-                    statusLabel.text = "<html>${statusLabel.text}</html>"
+                    val dot = if (wsOk) "<font color='#22c55e'>●</font>"
+                    else "<font color='#f59e0b'>●</font>"
+                    val mode = if (h.demo_mock) " · <font color='#f59e0b'>DEMO_MOCK</font>" else ""
+                    breadcrumb.text =
+                        "<html>$dot ${h.llm_provider} / ${h.llm_model}$mode " +
+                            "<font color='#888888'>· session $shortSession…</font></html>"
                 }.onFailure {
-                    statusLabel.text = "<html>● <font color='red'>backend unreachable</font></html>"
+                    breadcrumb.text =
+                        "<html><font color='#ef4444'>●</font> backend unreachable " +
+                            "<font color='#888888'>· session $shortSession…</font></html>"
                 }
             }
             delay(10_000)

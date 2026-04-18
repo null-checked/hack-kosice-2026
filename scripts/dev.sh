@@ -12,6 +12,18 @@ MODE="${1:-mock}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Source backend/.env so host/port/model come from the single source of
+# truth. If the user bumps APP_PORT there, this script picks it up.
+if [ -f backend/.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . backend/.env
+  set +a
+fi
+HOST="${APP_HOST:-127.0.0.1}"
+PORT="${APP_PORT:-8765}"
+DASH_PORT="${DASHBOARD_PORT:-3000}"
+
 # Colours (loop-safe on dumb terminals).
 c_reset=$'\033[0m'
 c_bold=$'\033[1m'
@@ -26,12 +38,12 @@ if [ "$MODE" = "live" ]; then mock_flag=0; fi
 
 printf "%s🦆 RubberDuck Live dev%s  mode=%s%s%s\n" \
   "$c_bold" "$c_reset" "$c_ok" "$MODE" "$c_reset"
-printf "%sbackend:%s http://127.0.0.1:8765   %sdashboard:%s http://localhost:3000\n\n" \
-  "$c_be" "$c_reset" "$c_da" "$c_reset"
+printf "%sbackend:%s http://%s:%s   %sdashboard:%s http://localhost:%s\n\n" \
+  "$c_be" "$c_reset" "$HOST" "$PORT" "$c_da" "$c_reset" "$DASH_PORT"
 
 # Port guard (cross-platform via scripts/kill_port.py --check).
-for p in 8765 3000; do
-  if python scripts/kill_port.py --check $p; then
+for p in "$PORT" "$DASH_PORT"; do
+  if python scripts/kill_port.py --check "$p"; then
     printf "%s✗%s port %s already in use. Run \`make stop\` first.\n" \
       "$c_warn" "$c_reset" "$p"
     exit 1
@@ -45,7 +57,7 @@ trap 'trap - INT TERM; printf "\n%sstopping…%s\n" "$c_dim" "$c_reset"; kill "$
 (
   cd backend
   DEMO_MOCK=$mock_flag exec uv run uvicorn src.main:app \
-    --host 127.0.0.1 --port 8765 2>&1 \
+    --host "$HOST" --port "$PORT" 2>&1 \
   | while IFS= read -r line; do printf "%s[backend]%s %s\n" "$c_be" "$c_reset" "$line"; done
 ) &
 pids+=($!)

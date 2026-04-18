@@ -25,8 +25,17 @@ import type {
 } from "@/lib/types";
 import { uniqueSessions } from "@/lib/metrics";
 
+// Backend WS URL is fully configurable via env. Priority:
+//   1. `NEXT_PUBLIC_BACKEND_WS_URL` — full override (e.g. for SSH tunnels).
+//   2. `NEXT_PUBLIC_BACKEND_HOST` + `NEXT_PUBLIC_BACKEND_PORT` — derive.
+//   3. Fallback to `127.0.0.1:8765` (stock dev setup).
+// Keep these in sync with backend/.env via dashboard/.env.local (see
+// dashboard/.env.example).
+const DEFAULT_BACKEND_HOST = process.env.NEXT_PUBLIC_BACKEND_HOST ?? "127.0.0.1";
+const DEFAULT_BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT ?? "8765";
 const DEFAULT_WS_URL =
-    process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? "ws://127.0.0.1:8765/api/v1/events";
+    process.env.NEXT_PUBLIC_BACKEND_WS_URL ??
+    `ws://${DEFAULT_BACKEND_HOST}:${DEFAULT_BACKEND_PORT}/api/v1/events`;
 const MAX_EVENTS = 2000;
 const BACKOFF_STEPS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 
