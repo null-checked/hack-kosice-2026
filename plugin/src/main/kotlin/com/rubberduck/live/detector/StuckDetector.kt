@@ -55,7 +55,8 @@ class StuckDetector {
         }
     }
 
-    private fun process(ev: DeveloperEvent) {
+    @org.jetbrains.annotations.VisibleForTesting
+    internal fun process(ev: DeveloperEvent) {
         when (ev.typeEnum) {
             EventType.UNDO -> onUndo(ev)
             EventType.TEST_RUN -> onTestRun(ev)
@@ -65,6 +66,9 @@ class StuckDetector {
             else -> { /* ignore */ }
         }
     }
+
+    @org.jetbrains.annotations.VisibleForTesting
+    internal fun firedRules(): Set<String> = lastFired.keys.toSet()
 
     // --- undo_burst ----------------------------------------------------------
     private fun onUndo(ev: DeveloperEvent) {

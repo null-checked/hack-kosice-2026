@@ -1,5 +1,6 @@
 package com.rubberduck.live.actions
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -29,6 +30,8 @@ import java.util.UUID
  * and open it in the editor.
  */
 class GenerateTestsAction : AnAction() {
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
         val enabled = e.project != null &&

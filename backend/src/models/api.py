@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -77,12 +77,24 @@ class SuggestRefactorResponse(BaseModel):
     reasoning: str
 
 
+class SocraticTurn(BaseModel):
+    """A single turn in the Socratic dialogue."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["coach", "developer"]
+    text: str
+
+
 class SocraticRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     recent_events: list[DeveloperEvent] = Field(default_factory=list)
     current_code: str = ""
     stuck_reason: str = "unknown"
+    # Empty list = opening question (pick by stuck_reason). Non-empty =
+    # the user has replied at least once; backend returns a follow-up.
+    conversation: list[SocraticTurn] = Field(default_factory=list)
 
 
 class SocraticResponse(BaseModel):
@@ -91,6 +103,56 @@ class SocraticResponse(BaseModel):
     question: str
     follow_ups: list[str] = Field(default_factory=list)
     confidence: float = 0.7
+
+
+class ChatTurn(BaseModel):
+    """A single turn in the /code-chat conversation. Uses the standard LLM
+    `user`/`assistant` vocabulary (not Socratic `coach`/`developer`) because
+    the chat is now general-purpose Q&A about the developer's code."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["user", "assistant"]
+    text: str
+
+
+class CodeChatRequest(BaseModel):
+    """Ask the duck a question about the current file."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    conversation: list[ChatTurn] = Field(default_factory=list)
+    current_code: str = ""
+    file_path: str | None = None
+    language: str = "python"
+
+
+class CodeChatResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    answer: str
+    model: str = "unknown"
+
+
+class CompleteRequest(BaseModel):
+    """Inline completion request. `prefix` is the code BEFORE the caret,
+    `suffix` is the code AFTER. Fill-in-the-middle style."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    language: str = "python"
+    prefix: str
+    suffix: str = ""
+    file_path: str | None = None
+    max_tokens: int = 96
+
+
+class CompleteResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    completion: str
+    stop_reason: str = "eol"  # eol | max_tokens | llm_truncated
+    model: str = "unknown"
 
 
 class ErrorEnvelope(BaseModel):

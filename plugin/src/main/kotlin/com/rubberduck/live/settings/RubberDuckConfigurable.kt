@@ -29,9 +29,11 @@ class RubberDuckConfigurable : Configurable {
 
     private val searchField = JBTextField()
     private val backendUrlField = JBTextField()
+    private val dashboardUrlField = JBTextField()
     private val sendEventsBox = JBCheckBox("Send events to dashboard")
     private val frequencyBox = ComboBox(InterventionFrequency.values())
     private val privacyBox = JBCheckBox("Strict privacy: never send code off-device")
+    private val inlineCompletionBox = JBCheckBox("Enable inline completion (ghost text after a pause)")
     private val mockModeBox = JBCheckBox("Enable Mock Mode (canned responses)")
     private val antiPatternRadarBox = JBCheckBox("Show anti-pattern indicators in project view")
     private val demoMockLabel = JBLabel("")
@@ -51,9 +53,11 @@ class RubberDuckConfigurable : Configurable {
         allSettingRows.clear()
         allSettingRows += listOf(
             "Backend URL" to backendUrlField,
+            "Dashboard URL" to dashboardUrlField,
             "Send events to dashboard" to sendEventsBox,
             "Intervention frequency" to frequencyBox,
             "Strict privacy" to privacyBox,
+            "Enable inline completion" to inlineCompletionBox,
             "Enable Mock Mode" to mockModeBox,
             "Show anti-pattern indicators in project view" to antiPatternRadarBox,
             "LLM provider/model" to providerLabel,
@@ -65,9 +69,11 @@ class RubberDuckConfigurable : Configurable {
         val formBuilder = FormBuilder.createFormBuilder()
             .addLabeledComponent("Search:", searchField, 1, false)
             .addLabeledComponent("Backend URL:", backendUrlField, 1, false)
+            .addLabeledComponent("Dashboard URL:", dashboardUrlField, 1, false)
             .addComponent(sendEventsBox, 1)
             .addLabeledComponent("Intervention frequency:", frequencyBox, 1, false)
             .addComponent(privacyBox, 1)
+            .addComponent(inlineCompletionBox, 1)
             .addComponent(mockModeBox, 1)
             .addComponent(antiPatternRadarBox, 1)
             .addSeparator()
@@ -97,19 +103,23 @@ class RubberDuckConfigurable : Configurable {
     override fun isModified(): Boolean {
         val s = RubberDuckSettings.getInstance().state
         return backendUrlField.text.trim() != s.backendUrl ||
+            dashboardUrlField.text.trim() != s.dashboardUrl ||
             sendEventsBox.isSelected != s.sendEventsToDashboard ||
             (frequencyBox.selectedItem as InterventionFrequency) != s.interventionFrequency ||
             privacyBox.isSelected != s.privacyMode ||
+            inlineCompletionBox.isSelected != s.enableInlineCompletion ||
             mockModeBox.isSelected != s.demoMockDisplay ||
             antiPatternRadarBox.isSelected != s.showAntiPatternRadar
     }
 
     override fun apply() {
         val s = RubberDuckSettings.getInstance().state
-        s.backendUrl = backendUrlField.text.trim().ifEmpty { "http://127.0.0.1:8765" }
+        s.backendUrl = backendUrlField.text.trim().ifEmpty { defaultBackendUrl() }
+        s.dashboardUrl = dashboardUrlField.text.trim().ifEmpty { defaultDashboardUrl() }
         s.sendEventsToDashboard = sendEventsBox.isSelected
         s.interventionFrequency = frequencyBox.selectedItem as InterventionFrequency
         s.privacyMode = privacyBox.isSelected
+        s.enableInlineCompletion = inlineCompletionBox.isSelected
         s.demoMockDisplay = mockModeBox.isSelected
         s.showAntiPatternRadar = antiPatternRadarBox.isSelected
     }
@@ -117,9 +127,11 @@ class RubberDuckConfigurable : Configurable {
     override fun reset() {
         val s = RubberDuckSettings.getInstance().state
         backendUrlField.text = s.backendUrl
+        dashboardUrlField.text = s.dashboardUrl
         sendEventsBox.isSelected = s.sendEventsToDashboard
         frequencyBox.selectedItem = s.interventionFrequency
         privacyBox.isSelected = s.privacyMode
+        inlineCompletionBox.isSelected = s.enableInlineCompletion
         mockModeBox.isSelected = s.demoMockDisplay
         antiPatternRadarBox.isSelected = s.showAntiPatternRadar
         providerLabel.text = if (s.lastSeenLlmProvider.isNotEmpty())

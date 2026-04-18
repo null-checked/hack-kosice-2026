@@ -17,4 +17,10 @@ enum class EventType {
     INTERVENTION_SHOWN,
     INTERVENTION_ACCEPTED,
     INTERVENTION_DISMISSED,
+    /**
+     * A local inspection (red squiggly or warning) fired in the editor.
+     * Emitted by [com.rubberduck.live.listeners.InspectionListener] via the
+     * `DaemonCodeAnalyzer.DAEMON_EVENT_TOPIC` project message-bus topic.
+     */
+    INSPECTION,
 }
