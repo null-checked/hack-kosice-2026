@@ -93,3 +93,41 @@ export interface BackendHealth {
   llm_model?: string;
   llm_available?: boolean;
 }
+
+/** A proposed code edit. */
+export interface CodeEdit {
+  file_path: string;
+  original_code: string;
+  proposed_code: string;
+  explanation?: string;
+  start_line?: number | null;
+  end_line?: number | null;
+  diff_unified?: string;
+}
+
+/** A single turn in the /code-chat conversation. Role = "user" | "assistant". */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+  edits?: CodeEdit[];
+}
+
+export interface ContextFile {
+  path: string;
+  content: string;
+}
+
+export interface CodeChatRequest {
+  conversation?: ChatTurn[];
+  current_code?: string;
+  file_path?: string | null;
+  language?: string;
+  context_files?: ContextFile[];
+  allow_edits?: boolean;
+}
+
+export interface CodeChatResponse {
+  answer: string;
+  model?: string;
+  edits?: CodeEdit[];
+}

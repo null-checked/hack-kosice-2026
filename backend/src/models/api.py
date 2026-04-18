@@ -105,6 +105,20 @@ class SocraticResponse(BaseModel):
     confidence: float = 0.7
 
 
+class CodeEdit(BaseModel):
+    """A proposed code edit."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    original_code: str
+    proposed_code: str
+    explanation: str = ""
+    start_line: int | None = None
+    end_line: int | None = None
+    diff_unified: str = ""
+
+
 class ChatTurn(BaseModel):
     """A single turn in the /code-chat conversation. Uses the standard LLM
     `user`/`assistant` vocabulary (not Socratic `coach`/`developer`) because
@@ -114,6 +128,7 @@ class ChatTurn(BaseModel):
 
     role: Literal["user", "assistant"]
     text: str
+    edits: list[CodeEdit] = Field(default_factory=list)
 
 
 class CodeChatRequest(BaseModel):
@@ -125,6 +140,8 @@ class CodeChatRequest(BaseModel):
     current_code: str = ""
     file_path: str | None = None
     language: str = "python"
+    context_files: list[ContextFile] = Field(default_factory=list)
+    allow_edits: bool = False
 
 
 class CodeChatResponse(BaseModel):
@@ -132,6 +149,7 @@ class CodeChatResponse(BaseModel):
 
     answer: str
     model: str = "unknown"
+    edits: list[CodeEdit] = Field(default_factory=list)
 
 
 class CompleteRequest(BaseModel):

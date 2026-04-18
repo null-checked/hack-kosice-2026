@@ -96,11 +96,24 @@ data class CompleteResponse(
     val model: String = "unknown",
 )
 
+/** A proposed code edit. */
+@Serializable
+data class CodeEdit(
+    val file_path: String,
+    val original_code: String,
+    val proposed_code: String,
+    val explanation: String = "",
+    val start_line: Int? = null,
+    val end_line: Int? = null,
+    val diff_unified: String = "",
+)
+
 /** Single turn in the /code-chat conversation. Role = "user" | "assistant". */
 @Serializable
 data class ChatTurn(
     val role: String,
     val text: String,
+    val edits: List<CodeEdit> = emptyList(),
 )
 
 @Serializable
@@ -109,12 +122,15 @@ data class CodeChatRequest(
     val current_code: String = "",
     val file_path: String? = null,
     val language: String = "python",
+    val context_files: List<ContextFile> = emptyList(),
+    val allow_edits: Boolean = false,
 )
 
 @Serializable
 data class CodeChatResponse(
     val answer: String,
     val model: String = "unknown",
+    val edits: List<CodeEdit> = emptyList(),
 )
 
 @Serializable
