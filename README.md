@@ -15,10 +15,7 @@
   <img alt="Local-fallback" src="https://img.shields.io/badge/Local%20fallback-Ollama%20qwen2.5--coder-22c55e?style=for-the-badge">
 </p>
 
-<p align="center">
-  <!-- Will be replaced by docs/assets/hero.gif once recorded. See docs/assets/README.md -->
-  <img src="docs/assets/hero.gif" alt="RubberDuck Live 20-second demo" width="820" onerror="this.style.display='none'">
-</p>
+<!-- Hero SVG above is the current polished placeholder. A future `docs/assets/hero.gif` 20-second demo can replace it 1:1 once recorded — see docs/assets/README.md. -->
 
 ---
 
@@ -49,9 +46,9 @@ You rewrite the same loop four times. You *know* something is wrong.
 </tr></thead>
 <tbody>
 <tr>
-  <td><img src="docs/assets/pillar1.png" alt="Generate Tests action" onerror="this.alt='(pillar1.png not yet recorded)'"></td>
-  <td><img src="docs/assets/pillar2.png" alt="Suggest Refactor diff viewer" onerror="this.alt='(pillar2.png not yet recorded)'"></td>
-  <td><img src="docs/assets/pillar3.png" alt="Socratic balloon + dashboard" onerror="this.alt='(pillar3.png not yet recorded)'"></td>
+  <td><img src="docs/assets/pillar1.svg" alt="Pillar 1 — right-click Generate Tests action in IntelliJ producing a pytest.parametrize file"></td>
+  <td><img src="docs/assets/pillar2.svg" alt="Pillar 2 — Suggest Refactor split diff viewer with smell-detection pills and reviewer checklist"></td>
+  <td><img src="docs/assets/pillar3.svg" alt="Pillar 3 — IntelliJ Socratic balloon next to the wellness dashboard showing score, heatmap, and stuck-moment timeline"></td>
 </tr>
 <tr>
   <td>Right-click any function → <strong>Generate Tests</strong>. A local planner-worker-reviewer pipeline emits a ready-to-run pytest / JUnit file, straight into the editor.</td>
@@ -112,7 +109,7 @@ Full blueprint: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ```bash
 git clone <this-repo> hack-kosice-2026 && cd hack-kosice-2026
 
-# 1. Install everything (backend uv sync · dashboard npm install · gradle wrapper)
+# 1. Install everything (backend uv sync · dashboard npm install · gradle wrapper · vscode-extension npm install)
 make install
 
 # 2. Start the judging flow: backend (mock) + dashboard, coloured prefixes, Ctrl-C cleans up
@@ -123,6 +120,20 @@ make demo
 # 3. In another terminal, launch IntelliJ with the plugin loaded
 make plugin-run
 ```
+
+## VS Code
+
+Prefer VS Code? We ship a feature-equivalent extension in TypeScript that
+talks to the **same** backend and feeds the **same** dashboard — same five
+StuckDetector rules, same right-click commands, same path redaction.
+
+```bash
+make vscode-dev      # opens vscode-extension/ in VS Code; press F5 to launch
+```
+
+Full walk-through (install, package as `.vsix`, configure, the three pillars,
+troubleshooting): [`docs/VSCODE_GUIDE.md`](docs/VSCODE_GUIDE.md). Why we
+ship both clients in one paragraph: same doc, last section.
 
 ### Running with a real LLM
 

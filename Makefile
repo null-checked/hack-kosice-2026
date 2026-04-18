@@ -23,7 +23,8 @@ C_RED   := $(shell tput -T xterm setaf 1 2>/dev/null || echo "")
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev dev-live dev-local plugin-build plugin-run plugin-verify \
-        demo demo-preflight check check-backend check-dashboard check-plugin \
+        demo demo-preflight check check-backend check-dashboard check-plugin check-vscode \
+        vscode-install vscode-compile vscode-package vscode-dev \
         clean stop
 
 ## help — show this message
@@ -50,7 +51,7 @@ help:
 	@printf "\n$(C_DIM)Ports: backend=8765 · dashboard=3000 · Ollama=11434$(C_RESET)\n"
 
 ## install — install all deps
-install:
+install: vscode-install
 	@printf "$(C_BOLD)→ backend deps$(C_RESET)\n"
 	@cd backend && (command -v uv >/dev/null 2>&1 && uv sync || python3 -m pip install -e .)
 	@printf "$(C_BOLD)→ dashboard deps$(C_RESET)\n"
@@ -62,6 +63,24 @@ install:
 	  chmod +x plugin/gradlew ; \
 	fi
 	@printf "$(C_GREEN)✓ install complete$(C_RESET)\n"
+
+## vscode-install — npm install for the VS Code extension
+vscode-install:
+	@printf "$(C_BOLD)→ vscode-extension deps$(C_RESET)\n"
+	@cd vscode-extension && (test -d node_modules || npm install)
+
+## vscode-compile — tsc -p .
+vscode-compile:
+	@cd vscode-extension && npm run compile
+
+## vscode-package — produce rubberduck-live-vscode-*.vsix
+vscode-package:
+	@cd vscode-extension && npm run package
+
+## vscode-dev — open vscode-extension/ in VS Code (then press F5)
+vscode-dev:
+	@printf "$(C_BOLD)→ Opening vscode-extension/ — press F5 to launch the Extension Development Host$(C_RESET)\n"
+	@command -v code >/dev/null 2>&1 && code vscode-extension || printf "$(C_YELL)`code` CLI not on PATH; open vscode-extension/ manually.$(C_RESET)\n"
 
 ## dev — parallel backend (mock) + dashboard
 dev:
@@ -99,8 +118,12 @@ plugin-verify:
 	@cd plugin && ./gradlew verifyPlugin
 
 ## check — full cross-subsystem verification
-check: check-backend check-dashboard check-plugin
+check: check-backend check-dashboard check-plugin check-vscode
 	@printf "\n$(C_GREEN)✓ check: ALL PASSED$(C_RESET)\n"
+
+check-vscode:
+	@printf "$(C_BOLD)[4/4] vscode-extension · tsc + eslint$(C_RESET)\n"
+	@cd vscode-extension && npm run compile >/dev/null && npm run lint >/dev/null && printf "$(C_GREEN)    ✓ vscode-extension clean$(C_RESET)\n"
 
 check-backend:
 	@printf "$(C_BOLD)[1/3] backend · py_compile$(C_RESET)\n"

@@ -50,7 +50,16 @@ object RubberDuckToolWindow {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val eventsModel = DefaultListModel<String>()
-    private val statusLabel = JBLabel("● disconnected")
+    private val statusLabel = JBLabel("● disconnected").apply {
+        font = font.deriveFont(font.size2D * 1.5f)
+        border = BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(java.awt.Color.LIGHT_GRAY, 2, true),
+            BorderFactory.createEmptyBorder(4, 12, 4, 12)
+        )
+        isOpaque = true
+        horizontalAlignment = javax.swing.SwingConstants.LEFT
+    }
+    private var lastLatencyMs: Long? = null
     private val sessionLabel = JBLabel("session: (not started)")
     private val providerLabel = JBLabel("llm: unknown")
     private val socraticArea = JBLabel("<html><i>No Socratic question yet. Keep coding.</i></html>")
@@ -126,14 +135,33 @@ object RubberDuckToolWindow {
                     s.lastSeenLlmProvider = h.llm_provider
                     s.lastSeenLlmModel = h.llm_model
                     s.demoMockDisplay = h.demo_mock
-                    statusLabel.text = if (ws)
-                        "● <font color='green'>connected</font>   (HTTP ok, WS ok)"
-                    else
-                        "● HTTP ok, WS reconnecting"
+                    // Latency measurement
+                    val latency = h.latency_ms ?: -1
+                    lastLatencyMs = if (latency >= 0) latency.toLong() else null
+                    // Color logic
+                    val (iconColor, bgColor, statusText) = when {
+                        !ws ->
+                            Triple("#FFD600", java.awt.Color(255, 249, 196), "WS reconnecting") // yellow
+                        latency >= 0 && latency < 150 ->
+                            Triple("#00C853", java.awt.Color(232, 245, 233), "Excellent") // green
+                        latency in 150..499 ->
+                            Triple("#FFD600", java.awt.Color(255, 249, 196), "OK") // yellow
+                        latency >= 500 ->
+                            Triple("#D50000", java.awt.Color(255, 235, 238), "Slow") // red
+                        else ->
+                            Triple("#BDBDBD", java.awt.Color(238, 238, 238), "Unknown") // gray
+                    }
+                    val latencyHtml = lastLatencyMs?.let { "<span style='font-size:smaller;color:#888'>&nbsp;(${it}ms)</span>" } ?: ""
+                    statusLabel.text = "<html>"
+                        + "<span style='font-size:1.2em;color:$iconColor;'>&#9679;</span> "
+                        + "<b>${if (ws) "connected" else "disconnected"}</b>"
+                        + " $statusText $latencyHtml"
+                        + "</html>"
+                    statusLabel.background = bgColor
                     providerLabel.text = "llm: ${h.llm_provider} / ${h.llm_model}" + if (h.demo_mock) "  [DEMO_MOCK]" else ""
-                    statusLabel.text = "<html>${statusLabel.text}</html>"
                 }.onFailure {
-                    statusLabel.text = "<html>● <font color='red'>backend unreachable</font></html>"
+                    statusLabel.text = "<html><span style='font-size:1.2em;color:#D50000;'>&#9679;</span> <b>backend unreachable</b></html>"
+                    statusLabel.background = java.awt.Color(255, 235, 238)
                 }
             }
             delay(10_000)

@@ -39,3 +39,5 @@ plugin/out/
 # ---- Misc runtime ----
 *.log
 /tmp/
+
+TO_BE_REMOVED

@@ -5,6 +5,8 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 import com.intellij.util.ui.FormBuilder
 import com.rubberduck.live.net.BackendClient
 import kotlinx.coroutines.CoroutineScope
@@ -25,14 +27,18 @@ import javax.swing.SwingUtilities
  */
 class RubberDuckConfigurable : Configurable {
 
+    private val searchField = JBTextField()
     private val backendUrlField = JBTextField()
     private val sendEventsBox = JBCheckBox("Send events to dashboard")
     private val frequencyBox = ComboBox(InterventionFrequency.values())
     private val privacyBox = JBCheckBox("Strict privacy: never send code off-device")
+    private val mockModeBox = JBCheckBox("Enable Mock Mode (canned responses)")
+    private val antiPatternRadarBox = JBCheckBox("Show anti-pattern indicators in project view")
     private val demoMockLabel = JBLabel("")
     private val providerLabel = JBLabel("")
     private val connectionStatus = JBLabel(" ")
     private val testButton = JButton("Test connection")
+    private val allSettingRows = mutableListOf<Pair<String, java.awt.Component>>()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -40,18 +46,50 @@ class RubberDuckConfigurable : Configurable {
 
     override fun createComponent(): JComponent {
         testButton.addActionListener { doTestConnection() }
-        val panel: JPanel = FormBuilder.createFormBuilder()
+
+        // Build settings rows for search/filter
+        allSettingRows.clear()
+        allSettingRows += listOf(
+            "Backend URL" to backendUrlField,
+            "Send events to dashboard" to sendEventsBox,
+            "Intervention frequency" to frequencyBox,
+            "Strict privacy" to privacyBox,
+            "Enable Mock Mode" to mockModeBox,
+            "Show anti-pattern indicators in project view" to antiPatternRadarBox,
+            "LLM provider/model" to providerLabel,
+            "Backend DEMO_MOCK" to demoMockLabel,
+            "Test connection" to testButton,
+            "Connection status" to connectionStatus
+        )
+
+        val formBuilder = FormBuilder.createFormBuilder()
+            .addLabeledComponent("Search:", searchField, 1, false)
             .addLabeledComponent("Backend URL:", backendUrlField, 1, false)
             .addComponent(sendEventsBox, 1)
             .addLabeledComponent("Intervention frequency:", frequencyBox, 1, false)
             .addComponent(privacyBox, 1)
+            .addComponent(mockModeBox, 1)
+            .addComponent(antiPatternRadarBox, 1)
             .addSeparator()
             .addLabeledComponent("LLM provider/model:", providerLabel, 1, false)
             .addLabeledComponent("Backend DEMO_MOCK:", demoMockLabel, 1, false)
             .addComponent(testButton, 1)
             .addComponent(connectionStatus, 1)
             .addComponentFillVertically(JPanel(), 0)
-            .panel
+        val panel: JPanel = formBuilder.panel
+
+        // Search filter logic
+        searchField.toolTipText = "Type to filter settings"
+        searchField.addKeyListener(object : KeyAdapter() {
+            override fun keyReleased(e: KeyEvent) {
+                val query = searchField.text.trim().lowercase()
+                for ((label, comp) in allSettingRows) {
+                    val visible = query.isEmpty() || label.lowercase().contains(query)
+                    comp.parent?.let { it.isVisible = visible }
+                }
+            }
+        })
+
         reset()
         return panel
     }
@@ -61,7 +99,9 @@ class RubberDuckConfigurable : Configurable {
         return backendUrlField.text.trim() != s.backendUrl ||
             sendEventsBox.isSelected != s.sendEventsToDashboard ||
             (frequencyBox.selectedItem as InterventionFrequency) != s.interventionFrequency ||
-            privacyBox.isSelected != s.privacyMode
+            privacyBox.isSelected != s.privacyMode ||
+            mockModeBox.isSelected != s.demoMockDisplay ||
+            antiPatternRadarBox.isSelected != s.showAntiPatternRadar
     }
 
     override fun apply() {
@@ -70,6 +110,8 @@ class RubberDuckConfigurable : Configurable {
         s.sendEventsToDashboard = sendEventsBox.isSelected
         s.interventionFrequency = frequencyBox.selectedItem as InterventionFrequency
         s.privacyMode = privacyBox.isSelected
+        s.demoMockDisplay = mockModeBox.isSelected
+        s.showAntiPatternRadar = antiPatternRadarBox.isSelected
     }
 
     override fun reset() {
@@ -78,6 +120,8 @@ class RubberDuckConfigurable : Configurable {
         sendEventsBox.isSelected = s.sendEventsToDashboard
         frequencyBox.selectedItem = s.interventionFrequency
         privacyBox.isSelected = s.privacyMode
+        mockModeBox.isSelected = s.demoMockDisplay
+        antiPatternRadarBox.isSelected = s.showAntiPatternRadar
         providerLabel.text = if (s.lastSeenLlmProvider.isNotEmpty())
             "${s.lastSeenLlmProvider} / ${s.lastSeenLlmModel}" else "(not probed yet)"
         demoMockLabel.text = if (s.demoMockDisplay) "ON" else "off"

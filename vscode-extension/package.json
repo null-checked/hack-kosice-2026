@@ -1,0 +1,102 @@
+{
+  "name": "rubberduck-live-vscode",
+  "displayName": "RubberDuck Live",
+  "description": "AI pair programmer that watches you think — Socratic questions, test generation, refactor suggestions.",
+  "version": "0.1.0",
+  "publisher": "rubberduck-live",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "icon": "icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "rubberduck.generateTests",   "title": "🦆 RubberDuck: Generate Tests" },
+      { "command": "rubberduck.suggestRefactor", "title": "🦆 RubberDuck: Suggest Refactor" },
+      { "command": "rubberduck.openDashboard",   "title": "🦆 RubberDuck: Open Dashboard" },
+      { "command": "rubberduck.testConnection",  "title": "🦆 RubberDuck: Test Connection" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "rubberduck.generateTests",   "group": "rubberduck@1", "when": "editorHasSelection || editorTextFocus" },
+        { "command": "rubberduck.suggestRefactor", "group": "rubberduck@2", "when": "editorTextFocus" }
+      ]
+    },
+    "configuration": {
+      "title": "RubberDuck Live",
+      "properties": {
+        "rubberduckLive.backendUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "Base URL of the RubberDuck Live backend (FastAPI)."
+        },
+        "rubberduckLive.sendEventsToDashboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Forward developer events over WebSocket to the dashboard."
+        },
+        "rubberduckLive.interventionFrequency": {
+          "type": "string",
+          "enum": ["MINIMAL", "NORMAL", "CHATTY"],
+          "default": "NORMAL",
+          "description": "How often Socratic interventions are allowed to fire."
+        },
+        "rubberduckLive.privacyMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Strict: never send code off-device. Disables Generate Tests + Suggest Refactor."
+        },
+        "rubberduckLive.dashboardUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL opened by 🦆 RubberDuck: Open Dashboard."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "rubberduck-live", "title": "RubberDuck Live", "icon": "icon.png" }
+      ]
+    },
+    "views": {
+      "rubberduck-live": [
+        { "id": "rubberduck.events",   "name": "Recent Events" },
+        { "id": "rubberduck.socratic", "name": "Socratic Feed" }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "lint": "eslint src --ext .ts --max-warnings=0",
+    "test": "vitest run",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.95.0",
+    "@types/ws": "^8.5.12",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "uuid": "^10.0.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.3.0"
+  }
+}

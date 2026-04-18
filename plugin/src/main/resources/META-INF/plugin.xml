@@ -27,6 +27,7 @@
     <resource-bundle>messages.RubberDuckBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <fileIconProvider implementation="com.rubberduck.live.ui.AntiPatternIconProvider"/>
         <!-- Application services -->
         <applicationService serviceImplementation="com.rubberduck.live.settings.RubberDuckSettings"/>
         <applicationService serviceImplementation="com.rubberduck.live.detector.EventBus"/>
@@ -80,6 +81,12 @@
                 text="RubberDuck: Open Dashboard"
                 description="Open the RubberDuck Live dashboard in a browser.">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="RubberDuck.ExplainOldCode"
+                class="com.rubberduck.live.actions.ExplainOldCodeAction"
+                text="Explain This Code 🦆"
+                description="Get an AI explanation for the selected code">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

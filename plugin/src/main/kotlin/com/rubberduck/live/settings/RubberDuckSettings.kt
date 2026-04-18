@@ -30,6 +30,7 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
         var interventionFrequency: InterventionFrequency = InterventionFrequency.NORMAL
         var privacyMode: Boolean = false
         var demoMockDisplay: Boolean = false // mirrors backend /health demo_mock
+        var showAntiPatternRadar: Boolean = true
         // Displayed in the settings panel as read-only diagnostics.
         var lastSeenLlmProvider: String = ""
         var lastSeenLlmModel: String = ""
@@ -47,8 +48,12 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
     val backendUrl: String get() = state.backendUrl.trimEnd('/')
     val backendApiBase: String get() = "$backendUrl/api/v1"
     val backendWsUrl: String get() = "ws" + backendApiBase.removePrefix("http") + "/events"
+    var showAntiPatternRadar: Boolean
+        get() = state.showAntiPatternRadar
+        set(value) { state.showAntiPatternRadar = value }
 
     companion object {
+        val instance: RubberDuckSettings get() = getInstance()
         fun getInstance(): RubberDuckSettings =
             ApplicationManager.getApplication().getService(RubberDuckSettings::class.java)
     }
