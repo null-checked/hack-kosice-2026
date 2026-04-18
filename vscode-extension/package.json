@@ -110,6 +110,12 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-attach current diagnostics to every chat turn."
+        },
+        "rubberduck.enabledSkills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["Test Generator", "Refactor Suggester", "Code Explainer", "Socratic Coach"],
+          "description": "Names of skills (as declared in SKILL.md frontmatter `name:`) that are exposed in the chat @ menu."
         }
       }
     },

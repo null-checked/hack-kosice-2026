@@ -271,9 +271,15 @@
       const items = [];
       items.push({ key: '@problems', desc: 'Attach current diagnostics', action: 'mention', payload: 'problems' });
       for (const sk of state.skillsCache) {
-        const key = '@skill:' + sk;
+        // Tolerate both legacy string shape and the richer
+        // {name, description, trigger} object shape so the UI keeps
+        // working whichever the host bridge emits.
+        const name = (typeof sk === 'string') ? sk : (sk && (sk.name || sk.id) || '');
+        if (!name) continue;
+        const desc = (typeof sk === 'object' && sk && sk.description) ? sk.description : 'Use skill prompt';
+        const key = '@skill:' + name;
         if (!query || key.slice(1).toLowerCase().includes(query)) {
-          items.push({ key, desc: 'Use skill prompt', action: 'mention', payload: 'skill:' + sk });
+          items.push({ key, desc, action: 'mention', payload: 'skill:' + name });
         }
       }
       for (const f of state.openFiles) {
@@ -645,7 +651,7 @@
   // --------------------------------------------------------- Send flow
   async function send(rawText) {
     const text = (rawText || '').trim();
-    // Slash-command detection
+    // Slash-command detection — strip leading `/<cmd>` token from user text.
     let slashCommand = null;
     const slashMatch = text.match(/^\/(explain|tests|refactor|fix|doc)\b\s*(.*)$/);
     let userText = text;
@@ -653,6 +659,25 @@
       slashCommand = slashMatch[1];
       userText = slashMatch[2].trim();
     }
+
+    // `@skill:<name>` mention — when user types it manually (no popup picked),
+    // resolve the body on-the-fly and strip the token from the echoed text.
+    // First match wins; extra tokens are also stripped but ignored.
+    const skillTokenRe = /(^|\s)@skill:([A-Za-z0-9_\-. ]+?)(?=\s|$)/;
+    const skillMatch = userText.match(skillTokenRe);
+    if (skillMatch && !state.skillBody) {
+      const candidate = skillMatch[2].trim();
+      try {
+        const body = await Bridge.getSkillBody(candidate);
+        if (body) {
+          state.skillBody = body;
+          state.skillName = candidate;
+        }
+      } catch (_) { /* ignore — skill simply unresolved */ }
+    }
+    // Strip *all* `@skill:*` tokens from the user-visible message so the
+    // transcript stays clean regardless of whether we resolved a body.
+    userText = userText.replace(/(^|\s)@skill:[A-Za-z0-9_\-. ]+?(?=\s|$)/g, '$1').trim();
 
     // If no free-form text but we have attachments, craft a default prompt.
     let displayText = userText;

@@ -25,7 +25,10 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(private readonly extensionUri: vscode.Uri) {
+    // Expose to module-level bridge handlers (bundled-skill fallback path).
+    activeExtensionUri = extensionUri;
+  }
 
   // ---------------------------------------------------------- Lifecycle
 
@@ -374,68 +377,105 @@ async function replaceSelection(text: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * List skills visible to the chat UI.
+ *
+ * Resolution order:
+ *   1. Workspace `.skills/<dir>/SKILL.md` (project-scoped, wins on name match).
+ *   2. Bundled `media/skills/*.md` shipped inside the extension (fallback
+ *      so `@skill:...` works in workspaces that haven't authored skills).
+ * Results are filtered by the `rubberduck.enabledSkills` user setting.
+ */
 async function listSkills(): Promise<Array<Record<string, unknown>>> {
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (!root) return [];
-  const skillsDir = vscode.Uri.joinPath(root, '.skills');
-  let entries: [string, vscode.FileType][];
-  try {
-    entries = await vscode.workspace.fs.readDirectory(skillsDir);
-  } catch {
-    return [];
+  const cfg = vscode.workspace.getConfiguration('rubberduck');
+  const enabled = cfg.get<string[]>('enabledSkills', [
+    'Test Generator', 'Refactor Suggester', 'Code Explainer', 'Socratic Coach',
+  ]);
+  const enabledSet = new Set(enabled);
+  const collected = await collectSkillMetas();
+  // Dedup by `name` — workspace wins over bundled.
+  const byName = new Map<string, Record<string, unknown>>();
+  for (const s of collected) {
+    const n = String(s.name ?? '');
+    if (!n) continue;
+    if (!byName.has(n)) byName.set(n, s);
   }
   const out: Array<Record<string, unknown>> = [];
-  for (const [name, type] of entries) {
-    if (type !== vscode.FileType.Directory) continue;
-    const skillFile = vscode.Uri.joinPath(skillsDir, name, 'SKILL.md');
-    try {
-      const bytes = await vscode.workspace.fs.readFile(skillFile);
-      const { frontmatter } = parseFrontmatter(new TextDecoder('utf-8').decode(bytes));
-      out.push({
-        name: frontmatter.name ?? name,
-        description: frontmatter.description ?? '',
-        trigger: frontmatter.trigger ?? '',
-      });
-    } catch {
-      // skip unreadable skill
-    }
+  for (const s of byName.values()) {
+    if (enabledSet.size === 0 || enabledSet.has(String(s.name))) out.push(s);
   }
   return out;
 }
 
 async function getSkillBody(name: string): Promise<string | null> {
   if (!name) return null;
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (!root) return null;
-  // Try by directory name first.
-  const candidates: vscode.Uri[] = [
-    vscode.Uri.joinPath(root, '.skills', name, 'SKILL.md'),
-  ];
-  // Also scan for a skill whose frontmatter name matches.
-  try {
-    const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(root, '.skills'));
-    for (const [dir, type] of entries) {
-      if (type === vscode.FileType.Directory && dir !== name) {
-        candidates.push(vscode.Uri.joinPath(root, '.skills', dir, 'SKILL.md'));
-      }
-    }
-  } catch {
-    // .skills/ not present
+  const all = await collectSkillEntries();
+  // Match by frontmatter `name`, then directory/file stem (case-insensitive).
+  const lower = name.toLowerCase();
+  for (const e of all) {
+    if (e.frontmatter.name === name) return e.body;
   }
-  for (const uri of candidates) {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const text = new TextDecoder('utf-8').decode(bytes);
-      const { frontmatter, body } = parseFrontmatter(text);
-      const fmName = frontmatter.name ?? '';
-      if (uri.path.endsWith(`/${name}/SKILL.md`) || fmName === name) {
-        return body;
-      }
-    } catch {
-      // keep trying
-    }
+  for (const e of all) {
+    if ((e.frontmatter.name ?? '').toLowerCase() === lower) return e.body;
+  }
+  for (const e of all) {
+    if (e.stem.toLowerCase() === lower) return e.body;
   }
   return null;
+}
+
+/** Discover every SKILL.md / bundled skill markdown with parsed frontmatter. */
+interface SkillEntry {
+  stem: string; // directory name (workspace) or filename stem (bundled)
+  frontmatter: Record<string, string>;
+  body: string;
+  source: 'workspace' | 'bundled';
+}
+async function collectSkillEntries(): Promise<SkillEntry[]> {
+  const out: SkillEntry[] = [];
+  // 1. Workspace `.skills/` (directory-per-skill, SKILL.md inside).
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+  if (root) {
+    const skillsDir = vscode.Uri.joinPath(root, '.skills');
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(skillsDir);
+      for (const [dir, type] of entries) {
+        if (type !== vscode.FileType.Directory) continue;
+        const uri = vscode.Uri.joinPath(skillsDir, dir, 'SKILL.md');
+        try {
+          const bytes = await vscode.workspace.fs.readFile(uri);
+          const { frontmatter, body } = parseFrontmatter(new TextDecoder('utf-8').decode(bytes));
+          out.push({ stem: dir, frontmatter, body, source: 'workspace' });
+        } catch { /* skip unreadable */ }
+      }
+    } catch { /* .skills/ missing — fine, we have the bundled fallback */ }
+  }
+  // 2. Bundled `media/skills/*.md` shipped with the extension.
+  if (activeExtensionUri) {
+    const bundledDir = vscode.Uri.joinPath(activeExtensionUri, 'media', 'skills');
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(bundledDir);
+      for (const [file, type] of entries) {
+        if (type !== vscode.FileType.File || !file.endsWith('.md')) continue;
+        const uri = vscode.Uri.joinPath(bundledDir, file);
+        try {
+          const bytes = await vscode.workspace.fs.readFile(uri);
+          const { frontmatter, body } = parseFrontmatter(new TextDecoder('utf-8').decode(bytes));
+          const stem = file.replace(/\.md$/i, '');
+          out.push({ stem, frontmatter, body, source: 'bundled' });
+        } catch { /* skip unreadable */ }
+      }
+    } catch { /* bundled missing — nothing to do */ }
+  }
+  return out;
+}
+async function collectSkillMetas(): Promise<Array<Record<string, unknown>>> {
+  const entries = await collectSkillEntries();
+  return entries.map((e) => ({
+    name: e.frontmatter.name ?? e.stem,
+    description: e.frontmatter.description ?? '',
+    trigger: e.frontmatter.trigger ?? '',
+  }));
 }
 
 function listModels(): string[] {
@@ -562,6 +602,7 @@ function parseFrontmatter(text: string): { frontmatter: Record<string, string>; 
 // ============================================================ Registration
 
 let activeProvider: ChatWebviewProvider | undefined;
+let activeExtensionUri: vscode.Uri | undefined;
 
 export function registerChatWebviewProvider(context: vscode.ExtensionContext): ChatWebviewProvider {
   const provider = new ChatWebviewProvider(context.extensionUri);

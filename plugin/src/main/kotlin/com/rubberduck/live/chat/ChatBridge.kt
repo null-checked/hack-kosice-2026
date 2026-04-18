@@ -290,23 +290,31 @@ class ChatBridge(
     }
 
     private fun listSkills(): JsonElement {
+        // Only enabled skills (per RubberDuckSettings.enabledSkills) are
+        // exposed to the web UI so the @ popup matches the Skills config.
         val skills = runCatching {
-            SkillsManager.getInstance(project).getAllSkills()
+            SkillsManager.getInstance(project).getEnabledSkills()
         }.getOrDefault(emptyList())
         return buildJsonArray {
             for (s in skills) {
-                // The UI's slash-menu only needs the string name; keep the
-                // array-of-strings shape the web UI already expects.
-                add(JsonPrimitive(s.name))
+                add(buildJsonObject {
+                    put("name", s.name)
+                    put("description", s.description)
+                    put("trigger", s.trigger)
+                })
             }
         }
     }
 
     private fun getSkillBody(name: String): JsonElement {
         if (name.isBlank()) return JsonNull
-        val skill = runCatching {
-            SkillsManager.getInstance(project).getSkillByName(name)
-        }.getOrNull() ?: return JsonNull
+        val mgr = runCatching { SkillsManager.getInstance(project) }.getOrNull()
+            ?: return JsonNull
+        // Match by frontmatter `name` first, then by `id` (filename stem) as
+        // a fallback so `@skill:code-explainer` also resolves.
+        val skill = mgr.getSkillByName(name)
+            ?: mgr.getAllSkills().find { it.id.equals(name, ignoreCase = true) }
+            ?: return JsonNull
         // Strip YAML frontmatter — return everything after the second `---`.
         val body = skill.content
         val m = Regex("(?s)^---\\s*\\n.*?\\n---\\s*\\n?(.*)$").find(body)
