@@ -34,15 +34,15 @@
 
 ---
 
-## Screenshots (to be captured in Phase 5)
+## Screenshots
 
-![TODO: hero-plugin.gif — the three right-click actions in sequence](assets/hero-plugin.gif)
-
-![TODO: socratic-balloon.gif — undo burst triggers the balloon](assets/socratic-balloon.gif)
-
-![TODO: heatmap.gif — dashboard flow-state heatmap updating live](assets/heatmap.gif)
-
-![TODO: architecture.png — exported from ARCHITECTURE.md mermaid](assets/architecture.png)
+See the three polished pillar mockups in the root
+[`README.md`](../README.md#the-three-pillars) — each one covers a right-click
+action (Generate Tests, Suggest Refactor) or the Socratic-balloon +
+wellness-dashboard loop. Source SVGs live under
+[`assets/`](assets/) and can be swapped 1:1 for real GIFs/PNGs using the
+recording recipes in [`assets/README.md`](assets/README.md). The full
+architecture diagram is in [`ARCHITECTURE.md` §1](ARCHITECTURE.md#1-high-level-architecture).
 
 ---
 

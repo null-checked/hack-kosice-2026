@@ -135,6 +135,27 @@ Ask one Socratic question about the invariant or assumption the developer is
 struggling with. Return ONLY the JSON object."""
 
 
+def build_explain_prompt(code: str, file_path: str, context: str = "") -> tuple[str, str]:
+    """Builds a prompt for explaining legacy code, with context and improvement suggestions."""
+    system = (
+        "You are a senior software engineer and code explainer. "
+        "Given legacy or unfamiliar code, explain in plain language what it does, "
+        "identify any complexity, code smells, or maintainability issues, and suggest improvements. "
+        "Output ONLY a single JSON object with EXACTLY these keys: "
+        '  - "explanation": string — plain-language summary of what the code does;\n'
+        '  - "complexity": string — rate the code as "simple", "moderate", or "complex";\n'
+        '  - "suggestions": array of strings — actionable improvements or refactorings.'
+        " No markdown, no prose outside the JSON."
+    )
+    user = (
+        f"File path: {file_path}\n"
+        f"Code to explain:\n```\n{code}\n```\n"
+        f"Context (e.g. git blame, comments): {context or 'none'}\n"
+        "Explain what this code does, rate its complexity, and suggest improvements. "
+        "Return ONLY the JSON object."
+    )
+    return system, user
+
 def build_socratic_prompt(
     *,
     stuck_reason: str,

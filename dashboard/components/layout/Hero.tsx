@@ -42,7 +42,29 @@ export function Hero({ right, className }: HeroProps) {
                         Your IDE&rsquo;s pair programmer that watches you think.
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">{right}</div>
+                {/*
+                 * Right-side action cluster.
+                 * The first child is conventionally the <StatusPill /> (role="status").
+                 * We boost its prominence here (without modifying StatusPill itself) so
+                 * judges immediately see the live backend connection state:
+                 *   - larger text + padding
+                 *   - bigger status dot
+                 *   - subtle cyan ring + glow
+                 *   - uppercase tracking for a "LIVE" feel
+                 */}
+                <div
+                    className={cn(
+                        "flex flex-wrap items-center gap-2.5",
+                        "[&>[role=status]]:px-3.5 [&>[role=status]]:py-2 [&>[role=status]]:text-sm",
+                        "[&>[role=status]]:font-semibold [&>[role=status]]:tracking-wide",
+                        "[&>[role=status]]:ring-1 [&>[role=status]]:ring-cyan-400/30",
+                        "[&>[role=status]]:shadow-[0_0_0_1px_rgba(34,211,238,0.15),0_0_18px_-2px_rgba(34,211,238,0.45)]",
+                        "[&>[role=status]>span:first-child]:h-2.5 [&>[role=status]>span:first-child]:w-2.5",
+                        "[&>[role=status]>span:last-child]:text-foreground/90",
+                    )}
+                >
+                    {right}
+                </div>
             </div>
         </header>
     );

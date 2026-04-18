@@ -116,3 +116,19 @@ data class CodeChatResponse(
     val answer: String,
     val model: String = "unknown",
 )
+
+@Serializable
+data class ExplainCodeRequest(
+    val code: String,
+    val file_path: String? = null,
+    val language: String = "python",
+    val context: String = "",
+)
+
+@Serializable
+data class ExplainCodeResponse(
+    val explanation: String,
+    val complexity: String = "unknown",
+    val suggestions: List<String> = emptyList(),
+    val model: String = "unknown",
+)

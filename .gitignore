@@ -39,6 +39,8 @@ plugin/out/
 # ---- Misc runtime ----
 *.log
 /tmp/
+# Stub placeholder from the vscode-extension branch; may be tightened later.
+TO_BE_REMOVED
 file.py
 # Scratch files the sandbox IDE wrote while manually testing plugin actions.
 test_fizz.py

@@ -7,6 +7,8 @@ import com.rubberduck.live.model.CodeChatRequest
 import com.rubberduck.live.model.CodeChatResponse
 import com.rubberduck.live.model.CompleteRequest
 import com.rubberduck.live.model.CompleteResponse
+import com.rubberduck.live.model.ExplainCodeRequest
+import com.rubberduck.live.model.ExplainCodeResponse
 import com.rubberduck.live.model.GenerateTestsRequest
 import com.rubberduck.live.model.GenerateTestsResponse
 import com.rubberduck.live.model.HealthResponse
@@ -75,6 +77,10 @@ class BackendClient {
     @Throws(IOException::class)
     fun codeChat(req: CodeChatRequest): CodeChatResponse =
         post("/code-chat", JsonCodec.json.encodeToString(req), CodeChatResponse.serializer())
+
+    @Throws(IOException::class)
+    fun explainCode(req: ExplainCodeRequest): ExplainCodeResponse =
+        post("/explain-code", JsonCodec.json.encodeToString(req), ExplainCodeResponse.serializer())
 
     private fun <T> post(
         path: String,
