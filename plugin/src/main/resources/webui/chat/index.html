@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RubberDuck Chat</title>
+  <link rel="stylesheet" href="vendor/highlight.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="dark">
+  <header class="toolbar" role="toolbar" aria-label="Chat toolbar">
+    <div class="toolbar-left">
+      <span class="brand" aria-label="RubberDuck">
+        <span class="brand-duck" aria-hidden="true">🦆</span>
+        <span class="brand-name">RubberDuck</span>
+      </span>
+    </div>
+    <div class="toolbar-center">
+      <label class="visually-hidden" for="model-picker">Model</label>
+      <select id="model-picker" class="model-picker" aria-label="Model"></select>
+    </div>
+    <div class="toolbar-right">
+      <button id="new-chat-btn" class="btn btn-ghost" type="button" title="New chat (Ctrl/Cmd+N)">
+        <span aria-hidden="true">＋</span>&nbsp;New chat
+      </button>
+      <span id="status-pill" class="status-pill status-connected" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-label">ready</span>
+      </span>
+    </div>
+  </header>
+
+  <main id="messages" class="messages" aria-live="polite" aria-relevant="additions text"></main>
+
+  <button id="scroll-bottom-pill" class="scroll-bottom-pill" type="button" hidden>
+    ↓ New messages
+  </button>
+
+  <section id="context-chips" class="context-chips" aria-label="Attached context"></section>
+
+  <form id="composer" class="composer" autocomplete="off">
+    <div class="composer-input-wrap">
+      <textarea
+        id="composer-input"
+        class="composer-input"
+        rows="1"
+        placeholder="Ask RubberDuck… (/ for commands, @ to mention files)"
+        aria-label="Message"></textarea>
+      <div id="slash-menu" class="popover" role="listbox" aria-label="Commands" hidden></div>
+    </div>
+    <div class="composer-actions">
+      <div class="composer-actions-left">
+        <button id="attach-selection-btn" type="button" class="btn btn-ghost btn-icon"
+                title="Attach current editor selection" aria-label="Attach selection">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M8 4h9l3 3v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" fill="none"
+                  stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M17 4v4h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="attach-file-btn" type="button" class="btn btn-ghost btn-icon"
+                title="Attach a file" aria-label="Attach file">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M21 12.5L12.5 21a5.5 5.5 0 0 1-7.78-7.78L13.5 4.44a3.8 3.8 0 1 1 5.37 5.37l-8.78 8.78a2.1 2.1 0 1 1-2.97-2.97l7.8-7.8"
+                  fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="composer-actions-right">
+        <button id="send-btn" type="submit" class="btn btn-primary" disabled>
+          <span class="send-label">Send</span>
+          <span class="send-kbd" aria-hidden="true">↵</span>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Vendor libraries, loaded in dependency order. All local; no remote code. -->
+  <script defer src="vendor/dompurify.min.js"></script>
+  <script defer src="vendor/marked.min.js"></script>
+  <script defer src="vendor/highlight.min.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>
