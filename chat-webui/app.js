@@ -24,7 +24,7 @@
   // ------------------------------------------------------------------ Bridge
   const HOST = window.rubberduck || null;
   const Bridge = {
-    getConfig:        async ()  => (await call('getConfig'))        ?? { backendBase: 'http://127.0.0.1:8765/api/v1', theme: 'dark', defaultModel: null },
+    getConfig:        async ()  => (await call('getConfig'))        ?? { backendBase: 'http://127.0.0.1:8765/api/v1', theme: 'dark', defaultModel: null, chatAvailableModels: [], chatAttachOpenFiles: false, chatAttachDiagnostics: false },
     getSelection:     async ()  => (await call('getSelection'))     ?? null,
     getOpenFiles:     async ()  => (await call('getOpenFiles'))     ?? [],
     getDiagnostics:   async ()  => (await call('getDiagnostics'))   ?? [],
@@ -38,7 +38,8 @@
     },
     listSkills:       async ()  => (await call('listSkills'))       ?? [],
     getSkillBody:     async (n) => (await call('getSkillBody', n))  ?? null,
-    listModels:       async ()  => (await call('listModels'))       ?? ['gpt-4o-mini', 'gpt-4o', 'claude-sonnet-4', 'ollama/llama3.1'],
+    listModels:       async ()  => (await call('listModels'))       ?? ['gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet-20241022', 'llama3.1:8b', 'qwen2.5-coder:7b'],
+    setModel:         async (m) => (await call('setModel', m))      ?? false,
     log:              (m)       => { try { HOST?.log ? HOST.log(String(m)) : console.log('[rubberduck]', m); } catch (_) {} },
     notify:           (m, k='info') => {
       try { HOST?.notify ? HOST.notify(String(m), k) : console[k === 'error' ? 'error' : 'log']('[rubberduck:' + k + ']', m); } catch (_) {}
@@ -72,6 +73,8 @@
     autoScroll:   true,
     openFiles:    [],
     skillsCache:  [],
+    attachOpenFiles:    false,
+    attachDiagnostics:  false,
   };
 
   // -------------------------------------------------------- Slash commands
@@ -98,6 +101,7 @@
     modelPicker:     $('#model-picker'),
     statusPill:      $('#status-pill'),
     slashMenu:       $('#slash-menu'),
+    attachToggles:   $('#attach-toggles'),
   };
 
   // ------------------------------------------------------------------ Utils
@@ -136,13 +140,19 @@
     const cfg = await Bridge.getConfig();
     if (cfg?.backendBase) state.backendBase = cfg.backendBase.replace(/\/+$/,'');
     if (cfg?.theme) document.body.dataset.theme = cfg.theme;
-    state.models = await Bridge.listModels();
-    state.model = cfg?.defaultModel || state.models[0] || null;
+    // Prefer config-provided list (covers both IDEs); fall back to listModels bridge.
+    state.models = (Array.isArray(cfg?.chatAvailableModels) && cfg.chatAvailableModels.length)
+      ? cfg.chatAvailableModels
+      : (await Bridge.listModels());
+    state.model = cfg?.chatModel || cfg?.defaultModel || state.models[0] || null;
+    state.attachOpenFiles   = Boolean(cfg?.chatAttachOpenFiles);
+    state.attachDiagnostics = Boolean(cfg?.chatAttachDiagnostics);
     state.openFiles = await Bridge.getOpenFiles();
     state.skillsCache = await Bridge.listSkills();
 
-    // Populate model picker.
+    // Populate model picker + attach-toggle chips.
     populateModels();
+    renderAttachToggles();
 
     // Wire listeners.
     wireEvents();
@@ -163,6 +173,35 @@
       if (m === state.model) opt.selected = true;
       el.modelPicker.appendChild(opt);
     }
+  }
+
+  /**
+   * Render the auto-attach status chips (open-files / diagnostics) in the
+   * toolbar as read-only indicators. Full edit lives in IDE settings —
+   * rubberduck.chatAttachOpenFiles / rubberduck.chatAttachDiagnostics.
+   */
+  function renderAttachToggles() {
+    if (!el.attachToggles) return;
+    el.attachToggles.innerHTML = '';
+    const mkChip = (label, on, title) => {
+      const c = document.createElement('span');
+      c.className = 'attach-chip' + (on ? ' is-on' : ' is-off');
+      c.title = title;
+      c.setAttribute('role', 'status');
+      c.innerHTML =
+        `<span class="attach-chip-dot" aria-hidden="true"></span>` +
+        `<span class="attach-chip-label">${label}</span>` +
+        `<span class="attach-chip-state">${on ? 'on' : 'off'}</span>`;
+      return c;
+    };
+    el.attachToggles.appendChild(
+      mkChip('open files', state.attachOpenFiles,
+        'Auto-attach open files to every chat turn (configure in IDE settings).')
+    );
+    el.attachToggles.appendChild(
+      mkChip('diagnostics', state.attachDiagnostics,
+        'Auto-attach current diagnostics to every chat turn (configure in IDE settings).')
+    );
   }
 
   // ------------------------------------------------------------------ Events
@@ -208,14 +247,29 @@
     el.modelPicker.addEventListener('change', (e) => {
       state.model = e.target.value;
       Bridge.log('model=' + state.model);
+      // Persist to IDE settings when the host bridge supports it.
+      try { HOST?.setModel && HOST.setModel(state.model); } catch (_) {}
     });
 
     el.newChatBtn.addEventListener('click', () => newChat());
 
     el.attachSelBtn.addEventListener('click', attachSelection);
     el.attachFileBtn.addEventListener('click', async () => {
-      const p = await Bridge.pickFile();
-      if (p) await addAttachment({ kind: 'file', path: p });
+      // Host bridge contract (unified): pickFile() → {filePath, content, language}
+      // (null when the user cancels). Legacy string shape is tolerated so old
+      // IDE builds keep working but new code should assume the object shape.
+      const r = await Bridge.pickFile();
+      if (!r) return;
+      if (typeof r === 'string') {
+        await addAttachment({ kind: 'file', path: r });
+      } else {
+        await addAttachment({
+          kind: 'file',
+          path: r.filePath || r.file_path || null,
+          content: r.content || '',
+          language: r.language || null,
+        });
+      }
     });
 
     el.messages.addEventListener('scroll', () => {
@@ -951,7 +1005,21 @@
           case 'set-theme':        document.body.dataset.theme = payload || 'dark'; return;
           case 'attach-selection': return attachSelection();
           case 'attach-file':
-            return Bridge.pickFile().then(p => p && addAttachment({ kind: 'file', path: p }));
+            return Bridge.pickFile().then(r => {
+              if (!r) return;
+              if (typeof r === 'string') return addAttachment({ kind: 'file', path: r });
+              return addAttachment({
+                kind: 'file',
+                path: r.filePath || r.file_path || null,
+                content: r.content || '',
+                language: r.language || null,
+              });
+            });
+          case 'set-attach-toggles':
+            state.attachOpenFiles   = Boolean(payload?.attachOpenFiles);
+            state.attachDiagnostics = Boolean(payload?.attachDiagnostics);
+            renderAttachToggles();
+            return;
           case 'send':             return send(payload != null ? String(payload) : el.input.value);
           case 'insert-text':
             el.input.value += (payload != null ? String(payload) : '');
@@ -978,6 +1046,12 @@
     setModels: (list) => {
       state.models = Array.isArray(list) ? list : state.models;
       populateModels();
+    },
+    setAttachToggles: (t) => {
+      if (!t) return;
+      state.attachOpenFiles   = Boolean(t.attachOpenFiles);
+      state.attachDiagnostics = Boolean(t.attachDiagnostics);
+      renderAttachToggles();
     },
     newChat,
     clearMessages,

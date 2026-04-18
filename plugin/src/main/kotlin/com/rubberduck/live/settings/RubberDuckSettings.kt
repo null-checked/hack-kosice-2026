@@ -101,8 +101,9 @@ class RubberDuckSettings : PersistentStateComponent<RubberDuckSettings.State> {
         var chatAvailableModels: MutableList<String> = mutableListOf(
             "gpt-4o-mini",
             "gpt-4o",
-            "claude-sonnet-4",
-            "ollama/llama3.1",
+            "claude-3-5-sonnet-20241022",
+            "llama3.1:8b",
+            "qwen2.5-coder:7b",
         )
         var chatMaxHistoryTokens: Int = 8000
         var chatAttachOpenFiles: Boolean = false

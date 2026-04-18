@@ -190,6 +190,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     listSkills:       ()    => call('listSkills'),
     getSkillBody:     (n)   => call('getSkillBody', [n]),
     listModels:       ()    => call('listModels'),
+    setModel:         (m)   => call('setModel', [m]),
     saveHistory:      (m)   => call('saveHistory', [m]),
     log:              (m)   => call('log', [m]),
     notify:           (m,k) => call('notify', [m, k]),
@@ -260,18 +261,45 @@ const HANDLERS: Record<string, Handler> = {
   listSkills:       () => listSkills(),
   getSkillBody:     ([n]) => getSkillBody(String(n ?? '')),
   listModels:       () => listModels(),
+  setModel:         ([m]) => setModel(String(m ?? '')),
   saveHistory:      ([m]) => saveHistory(m),
   log:              ([m]) => { log.info(`[chat] ${stringify(m)}`); return true; },
   notify:           ([m, k]) => notify(String(m ?? ''), String(k ?? 'info')),
   onReady:          () => { log.info('[chat] webview ready'); return true; },
 };
 
+/**
+ * Merge the canonical `rubberduck.*` namespace with any legacy
+ * `rubberduckLive.*` keys (`rubberduck.*` wins when both set).  The
+ * returned shape is what the shared web UI consumes from
+ * `window.rubberduck.getConfig()`.
+ */
 function getConfig(): Record<string, unknown> {
-  const cfg = vscode.workspace.getConfiguration('rubberduck');
-  const legacyBase = Config.backendApiBase;
-  const backendBase = cfg.get<string>('backendBaseUrl', legacyBase);
-  const defaultModel = cfg.get<string>('chatModel', 'gpt-4o-mini');
-  return { backendBase, theme: currentTheme(), defaultModel };
+  const backendBase = Config.backendApiBase;
+  const chatModel = Config.chatModel;
+  const chatAvailableModels = Config.chatAvailableModels;
+  return {
+    backendBase,
+    theme: currentTheme(),
+    defaultModel: chatModel,
+    chatModel,
+    chatAvailableModels,
+    chatMaxHistoryTokens: Config.chatMaxHistoryTokens,
+    chatAttachOpenFiles: Config.chatAttachOpenFiles,
+    chatAttachDiagnostics: Config.chatAttachDiagnostics,
+  };
+}
+
+async function setModel(model: string): Promise<boolean> {
+  const m = (model ?? '').trim();
+  if (!m) return false;
+  try {
+    await Config.setChatModel(m);
+    return true;
+  } catch (e) {
+    log.warn(`[chat] setModel failed: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
 }
 
 function getSelection(): Record<string, unknown> | null {
@@ -479,10 +507,7 @@ async function collectSkillMetas(): Promise<Array<Record<string, unknown>>> {
 }
 
 function listModels(): string[] {
-  const cfg = vscode.workspace.getConfiguration('rubberduck');
-  const models = cfg.get<string[]>('chatAvailableModels', []);
-  if (models && models.length > 0) return models;
-  return ['gpt-4o-mini', 'gpt-4o', 'claude-sonnet-4', 'ollama/llama3.1'];
+  return Config.chatAvailableModels;
 }
 
 async function saveHistory(messages: unknown): Promise<boolean> {

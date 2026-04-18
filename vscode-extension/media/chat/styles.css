@@ -668,3 +668,50 @@ body[data-theme="light"] {
   .code-block-wrap pre, .code-block-wrap pre code.hljs { color: #000 !important; }
   .code-lang-pill { color: #555; background: #e4e6e9; }
 }
+
+/* -------- Toolbar: auto-attach status chips (read-only indicators) -------- */
+.attach-toggles {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  background: var(--chip-bg, rgba(255,255,255,0.04));
+  color: var(--fg-dim, rgba(255,255,255,0.65));
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: none;
+}
+.attach-chip .attach-chip-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+.attach-chip.is-on {
+  color: var(--accent-on, #86ddb2);
+  border-color: rgba(134, 221, 178, 0.35);
+  background: rgba(134, 221, 178, 0.08);
+}
+.attach-chip.is-on .attach-chip-dot { opacity: 1; }
+.attach-chip .attach-chip-state {
+  font-variant: small-caps;
+  opacity: 0.7;
+}
+body[data-theme="light"] .attach-chip {
+  border-color: rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.04);
+  color: rgba(0,0,0,0.6);
+}
+body[data-theme="light"] .attach-chip.is-on {
+  color: #1a7f4c;
+  border-color: rgba(26, 127, 76, 0.4);
+  background: rgba(26, 127, 76, 0.08);
+}

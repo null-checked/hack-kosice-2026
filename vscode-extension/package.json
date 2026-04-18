@@ -52,7 +52,8 @@
         "rubberduckLive.backendUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8765",
-          "description": "Base URL of the RubberDuck Live backend (FastAPI)."
+          "description": "Base URL of the RubberDuck Live backend (FastAPI).",
+          "deprecationMessage": "Deprecated: use `rubberduck.backendBaseUrl` instead."
         },
         "rubberduckLive.sendEventsToDashboard": {
           "type": "boolean",
@@ -73,7 +74,8 @@
         "rubberduckLive.dashboardUrl": {
           "type": "string",
           "default": "http://localhost:3000",
-          "description": "URL opened by 🦆 RubberDuck: Open Dashboard."
+          "description": "URL opened by 🦆 RubberDuck: Open Dashboard.",
+          "deprecationMessage": "Deprecated: use `rubberduck.dashboardBaseUrl` instead."
         },
         "rubberduckLive.enableInlineCompletion": {
           "type": "boolean",
@@ -85,15 +87,40 @@
           "default": "http://127.0.0.1:8765/api/v1",
           "description": "Base URL used by the chat web UI for its direct SSE fetch to the backend."
         },
+        "rubberduck.dashboardBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL opened by 🦆 RubberDuck: Open Dashboard (supersedes `rubberduckLive.dashboardUrl`)."
+        },
         "rubberduck.chatModel": {
           "type": "string",
           "default": "gpt-4o-mini",
-          "description": "Default model pre-selected in the chat composer."
+          "enum": [
+            "gpt-4o-mini",
+            "gpt-4o",
+            "claude-3-5-sonnet-20241022",
+            "llama3.1:8b",
+            "qwen2.5-coder:7b"
+          ],
+          "enumDescriptions": [
+            "OpenAI GPT-4o mini (fast, cheap)",
+            "OpenAI GPT-4o (balanced)",
+            "Anthropic Claude 3.5 Sonnet",
+            "Ollama Llama 3.1 8B (local)",
+            "Ollama Qwen2.5-Coder 7B (local, code-focused)"
+          ],
+          "description": "Default model pre-selected in the chat composer. Custom values are accepted — pick any string from `rubberduck.chatAvailableModels`."
         },
         "rubberduck.chatAvailableModels": {
           "type": "array",
           "items": { "type": "string" },
-          "default": ["gpt-4o-mini", "gpt-4o", "claude-sonnet-4", "ollama/llama3.1"],
+          "default": [
+            "gpt-4o-mini",
+            "gpt-4o",
+            "claude-3-5-sonnet-20241022",
+            "llama3.1:8b",
+            "qwen2.5-coder:7b"
+          ],
           "description": "Models offered in the chat model picker."
         },
         "rubberduck.chatMaxHistoryTokens": {

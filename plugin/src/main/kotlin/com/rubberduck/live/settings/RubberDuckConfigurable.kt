@@ -40,9 +40,14 @@ class RubberDuckConfigurable : Configurable {
     // what the chat tool window is using. Full model-picker UX + skills
     // integration arrives in Step 7.
     private val chatEnabledBox = JBCheckBox("Enable embedded Chat tool window (JCEF)")
-    private val chatModelField = JBTextField()
+    // Editable combo box so users can pick from `chatAvailableModels` or
+    // type a custom one (free text is committed on Apply).
+    private val chatModelCombo: ComboBox<String> = ComboBox<String>().apply { isEditable = true }
+    private val chatAvailableModelsField = JBTextField().apply {
+        toolTipText = "Comma-separated list of models offered in the chat toolbar dropdown."
+    }
     private val chatMaxHistorySpinner = javax.swing.JSpinner(
-        javax.swing.SpinnerNumberModel(8000, 512, 64_000, 256)
+        javax.swing.SpinnerNumberModel(8000, 1000, 100_000, 1000)
     )
     private val chatAttachOpenFilesBox = JBCheckBox("Auto-attach open files as chat context")
     private val chatAttachDiagnosticsBox = JBCheckBox("Auto-attach current diagnostics as chat context")
@@ -95,7 +100,8 @@ class RubberDuckConfigurable : Configurable {
             // --- Chat (Phase 4 MVP row set) ---
             .addComponent(JBLabel("<html><b>Chat</b></html>"), 1)
             .addComponent(chatEnabledBox, 1)
-            .addLabeledComponent("Default chat model:", chatModelField, 1, false)
+            .addLabeledComponent("Default chat model:", chatModelCombo, 1, false)
+            .addLabeledComponent("Available models (comma-separated):", chatAvailableModelsField, 1, false)
             .addLabeledComponent("Max history tokens:", chatMaxHistorySpinner, 1, false)
             .addComponent(chatAttachOpenFilesBox, 1)
             .addComponent(chatAttachDiagnosticsBox, 1)
@@ -129,7 +135,8 @@ class RubberDuckConfigurable : Configurable {
             mockModeBox.isSelected != s.demoMockDisplay ||
             antiPatternRadarBox.isSelected != s.showAntiPatternRadar ||
             chatEnabledBox.isSelected != s.chatEnabled ||
-            chatModelField.text.trim() != s.chatModel ||
+            currentChatModel() != s.chatModel ||
+            parseModelList(chatAvailableModelsField.text) != s.chatAvailableModels.toList() ||
             (chatMaxHistorySpinner.value as Int) != s.chatMaxHistoryTokens ||
             chatAttachOpenFilesBox.isSelected != s.chatAttachOpenFiles ||
             chatAttachDiagnosticsBox.isSelected != s.chatAttachDiagnostics
@@ -146,7 +153,15 @@ class RubberDuckConfigurable : Configurable {
         s.demoMockDisplay = mockModeBox.isSelected
         s.showAntiPatternRadar = antiPatternRadarBox.isSelected
         s.chatEnabled = chatEnabledBox.isSelected
-        s.chatModel = chatModelField.text.trim().ifEmpty { "gpt-4o-mini" }
+        val parsedModels = parseModelList(chatAvailableModelsField.text)
+        s.chatAvailableModels = parsedModels.toMutableList().ifEmpty {
+            mutableListOf("gpt-4o-mini", "gpt-4o", "claude-3-5-sonnet-20241022", "llama3.1:8b", "qwen2.5-coder:7b")
+        }
+        s.chatModel = currentChatModel().ifEmpty { "gpt-4o-mini" }
+        // Ensure the selected model is also present in the list.
+        if (s.chatAvailableModels.none { it.equals(s.chatModel, ignoreCase = true) }) {
+            s.chatAvailableModels.add(s.chatModel)
+        }
         s.chatMaxHistoryTokens = chatMaxHistorySpinner.value as Int
         s.chatAttachOpenFiles = chatAttachOpenFilesBox.isSelected
         s.chatAttachDiagnostics = chatAttachDiagnosticsBox.isSelected
@@ -166,11 +181,25 @@ class RubberDuckConfigurable : Configurable {
             "${s.lastSeenLlmProvider} / ${s.lastSeenLlmModel}" else "(not probed yet)"
         demoMockLabel.text = if (s.demoMockDisplay) "ON" else "off"
         chatEnabledBox.isSelected = s.chatEnabled
-        chatModelField.text = s.chatModel
+        // Rebuild combobox from current available-models list.
+        chatModelCombo.removeAllItems()
+        for (m in s.chatAvailableModels) chatModelCombo.addItem(m)
+        chatModelCombo.selectedItem = s.chatModel
+        chatAvailableModelsField.text = s.chatAvailableModels.joinToString(", ")
         chatMaxHistorySpinner.value = s.chatMaxHistoryTokens
         chatAttachOpenFilesBox.isSelected = s.chatAttachOpenFiles
         chatAttachDiagnosticsBox.isSelected = s.chatAttachDiagnostics
     }
+
+    /** Read the current value of the editable model combo (selection or typed text). */
+    private fun currentChatModel(): String {
+        val edited = (chatModelCombo.editor?.item as? String)?.trim().orEmpty()
+        if (edited.isNotEmpty()) return edited
+        return (chatModelCombo.selectedItem as? String)?.trim().orEmpty()
+    }
+
+    private fun parseModelList(text: String): List<String> =
+        text.split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
     private fun doTestConnection() {
         connectionStatus.text = "Pinging…"

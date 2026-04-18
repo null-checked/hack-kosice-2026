@@ -14,10 +14,12 @@ import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefBrowserBase
 import com.intellij.ui.jcef.JBCefJSQuery
@@ -87,6 +89,7 @@ class ChatBridge(
         register("log") { payload -> logMessage(unquoteString(payload)) }
         register("notify") { payload -> notifyUser(payload) }
         register("onReady") { onReady() }
+        register("setModel") { payload -> setModel(unquoteString(payload)) }
     }
 
     /** JS source injected on every page load to expose `window.rubberduck.*`. */
@@ -159,6 +162,13 @@ class ChatBridge(
             put("backendBase", s.backendApiBase)
             put("theme", currentTheme())
             put("defaultModel", st.chatModel)
+            put("chatModel", st.chatModel)
+            put("chatMaxHistoryTokens", st.chatMaxHistoryTokens)
+            put("chatAttachOpenFiles", st.chatAttachOpenFiles)
+            put("chatAttachDiagnostics", st.chatAttachDiagnostics)
+            put("chatAvailableModels", buildJsonArray {
+                st.chatAvailableModels.forEach { add(JsonPrimitive(it)) }
+            })
         }
     }
 
@@ -249,16 +259,36 @@ class ChatBridge(
         val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
         var result: JsonElement = JsonNull
         ApplicationManager.getApplication().invokeAndWait {
-            val vf = FileChooser.chooseFile(descriptor, project, null)
-            if (vf != null) {
-                val base = project.basePath?.let { Paths.get(it) }
-                val rel = if (base != null) {
-                    runCatching { base.relativize(Paths.get(vf.path)).toString() }.getOrDefault(vf.path)
-                } else vf.path
-                result = JsonPrimitive(rel)
+            val vf = FileChooser.chooseFile(descriptor, project, null) ?: return@invokeAndWait
+            val base = project.basePath?.let { Paths.get(it) }
+            val rel = if (base != null) {
+                runCatching { base.relativize(Paths.get(vf.path)).toString() }.getOrDefault(vf.path)
+            } else vf.path
+            val content = runCatching { VfsUtil.loadText(vf) }.getOrDefault("")
+            val language = runCatching {
+                FileTypeManager.getInstance().getFileTypeByFile(vf).name.lowercase()
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+                ?: vf.extension?.lowercase()
+                ?: "text"
+            result = buildJsonObject {
+                put("filePath", rel)
+                put("content", content)
+                put("language", language)
             }
         }
         return result
+    }
+
+    private fun setModel(model: String): JsonElement {
+        if (model.isBlank()) return JsonPrimitive(false)
+        val s = RubberDuckSettings.getInstance().state
+        s.chatModel = model
+        // If the user picks a model that isn't already in the list,
+        // append it so the combobox round-trips next time Settings opens.
+        if (s.chatAvailableModels.none { it.equals(model, ignoreCase = true) }) {
+            s.chatAvailableModels.add(model)
+        }
+        return JsonPrimitive(true)
     }
 
     private fun insertAtCursor(text: String): JsonElement {
@@ -324,7 +354,11 @@ class ChatBridge(
     private fun listModels(): JsonElement {
         val s = RubberDuckSettings.getInstance().state
         val models = if (s.chatAvailableModels.isNotEmpty()) s.chatAvailableModels
-        else mutableListOf("gpt-4o-mini", "gpt-4o", "claude-sonnet-4", "ollama/llama3.1")
+        else mutableListOf(
+            "gpt-4o-mini", "gpt-4o",
+            "claude-3-5-sonnet-20241022",
+            "llama3.1:8b", "qwen2.5-coder:7b",
+        )
         return buildJsonArray { models.forEach { add(JsonPrimitive(it)) } }
     }
 
@@ -414,11 +448,7 @@ class ChatBridge(
 
         /** Small indirection so the theme decision lives in one place. */
         fun isDarkTheme(): Boolean {
-            return runCatching {
-                com.intellij.util.ui.UIUtil.isUnderDarcula()
-            }.getOrElse {
-                !com.intellij.ui.JBColor.isBright()
-            }
+            return runCatching { !com.intellij.ui.JBColor.isBright() }.getOrDefault(true)
         }
     }
 }

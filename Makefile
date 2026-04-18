@@ -28,7 +28,7 @@ C_RED   := $(shell tput -T xterm setaf 1 2>/dev/null || echo "")
 .PHONY: help install dev dev-live dev-local plugin-build plugin-run plugin-verify \
         demo demo-preflight check check-backend check-dashboard check-plugin check-vscode \
         vscode-install vscode-compile vscode-package vscode-dev \
-        sync-chat-webui chat-webui-serve \
+        sync-chat-webui verify-chat-webui chat-webui-serve \
         clean stop
 
 ## help — show this message
@@ -169,9 +169,14 @@ clean:
 # and is ingested verbatim by both IDE shells via `sync-chat-webui`.
 # ---------------------------------------------------------------------------
 
-## sync-chat-webui — copy chat-webui/ into plugin + vscode-extension resource dirs
+## sync-chat-webui — copy chat-webui/ (incl. vendor/) into plugin + vscode-extension resource dirs
 sync-chat-webui:
 	@printf "$(C_BOLD)→ syncing chat-webui → plugin + vscode-extension$(C_RESET)\n"
+	@if [ ! -f chat-webui/vendor/marked.min.js ] || [ ! -f chat-webui/vendor/highlight.min.js ] \
+	   || [ ! -f chat-webui/vendor/dompurify.min.js ] || [ ! -f chat-webui/vendor/highlight.css ]; then \
+	  printf "$(C_YELL)  vendor files missing — running FETCH.sh first$(C_RESET)\n"; \
+	  bash chat-webui/vendor/FETCH.sh; \
+	fi
 	@rm -rf plugin/src/main/resources/webui/chat
 	@mkdir -p plugin/src/main/resources/webui/chat
 	@cp -R chat-webui/. plugin/src/main/resources/webui/chat/
@@ -179,6 +184,20 @@ sync-chat-webui:
 	@mkdir -p vscode-extension/media/chat
 	@cp -R chat-webui/. vscode-extension/media/chat/
 	@printf "$(C_GREEN)✓ chat-webui synced$(C_RESET)\n"
+	@$(MAKE) --no-print-directory verify-chat-webui
+
+## verify-chat-webui — assert vendor bundle is present under both IDE media dirs
+verify-chat-webui:
+	@printf "$(C_BOLD)→ verifying chat-webui vendor/ in both IDE media dirs$(C_RESET)\n"
+	@missing=0; for f in marked.min.js highlight.min.js dompurify.min.js highlight.css; do \
+	  for d in plugin/src/main/resources/webui/chat/vendor vscode-extension/media/chat/vendor; do \
+	    if [ ! -f "$$d/$$f" ]; then \
+	      printf "$(C_RED)  ✗ missing: $$d/$$f$(C_RESET)\n"; missing=1; \
+	    fi; \
+	  done; \
+	done; \
+	if [ $$missing -ne 0 ]; then exit 1; fi
+	@printf "$(C_GREEN)✓ vendor bundle present in both IDE media dirs$(C_RESET)\n"
 
 ## chat-webui-serve — standalone preview at http://127.0.0.1:8080
 chat-webui-serve:
