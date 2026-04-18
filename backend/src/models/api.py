@@ -197,3 +197,148 @@ class ErrorEnvelope(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     error: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/chat — streaming chat endpoint (Step 2 of the chat feature rollout).
+#
+# These models power the SSE-based chat protocol used by the IntelliJ plugin
+# and VS Code extension. They are INTENTIONALLY separate from the legacy
+# CodeChat* models above, which back the non-streaming /api/v1/code-chat
+# endpoint (kept for backwards compatibility).
+# ---------------------------------------------------------------------------
+
+
+class ChatMessage(BaseModel):
+    """A single message in a multi-turn chat conversation.
+
+    Uses the canonical OpenAI-ish vocabulary (system/user/assistant) so the
+    message list can be handed to any chat-completions-shaped LLM verbatim.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatSelection(BaseModel):
+    """The active editor selection the developer is asking about."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str | None = None
+    language: str | None = None
+    code: str
+
+
+class ChatAttachedFile(BaseModel):
+    """A file the client attached as additional context (e.g. via @-mention)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    content: str
+    language: str | None = None
+
+
+class ChatDiagnostic(BaseModel):
+    """An editor diagnostic (compiler error, linter warning, …) attached as context."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    line: int | None = None
+    severity: Literal["error", "warning", "info", "hint"] = "error"
+    message: str
+
+
+class ChatContext(BaseModel):
+    """Bundle of IDE context sent alongside the conversation turns.
+
+    Each field is optional; the context builder renders only the sections
+    that are actually populated.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    selection: ChatSelection | None = None
+    attached_files: list[ChatAttachedFile] = Field(default_factory=list)
+    diagnostics: list[ChatDiagnostic] = Field(default_factory=list)
+    open_files: list[str] = Field(default_factory=list)  # paths only, for awareness
+
+
+class ChatRequest(BaseModel):
+    """POST body for /api/v1/chat."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    messages: list[ChatMessage] = Field(default_factory=list)
+    context: ChatContext = Field(default_factory=ChatContext)
+    slash_command: Literal["explain", "tests", "refactor", "fix", "doc"] | None = None
+    # Skill name as declared in a .skills/<name>/SKILL.md frontmatter. For the
+    # hackathon the server doesn't try to resolve project-scoped skill files;
+    # the client sends the markdown body inline via `skill_body` instead.
+    skill_name: str | None = None
+    skill_body: str | None = None  # full SKILL.md body, overrides skill_name lookup
+    model: str | None = None  # override LLM_MODEL for this request
+    temperature: float | None = None
+    max_tokens: int | None = None
+    stream: bool = True
+
+
+# ---- SSE event envelopes (server → client) ----
+#
+# Each event is serialised as a JSON object and wrapped in one SSE frame:
+#     data: {"type":"token","delta":"..."}\n\n
+# A trailing `data: [DONE]\n\n` sentinel is emitted after the stream completes
+# so the client can close the reader without having to parse the final frame.
+
+
+class ChatTokenEvent(BaseModel):
+    type: Literal["token"] = "token"
+    delta: str
+
+
+class ChatToolCallEvent(BaseModel):
+    type: Literal["tool_call"] = "tool_call"
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatUsageEvent(BaseModel):
+    type: Literal["usage"] = "usage"
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ChatDoneEvent(BaseModel):
+    type: Literal["done"] = "done"
+    finish_reason: str | None = None
+
+
+class ChatErrorEvent(BaseModel):
+    type: Literal["error"] = "error"
+    message: str
+
+
+class ChatUsage(BaseModel):
+    """Token usage block for the non-streaming response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ChatResponse(BaseModel):
+    """Non-streaming fallback response returned when `stream=False`."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    content: str
+    usage: ChatUsage | None = None
+    finish_reason: str | None = None
+    model: str = "unknown"
