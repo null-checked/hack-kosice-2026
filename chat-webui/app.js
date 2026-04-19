@@ -810,12 +810,85 @@
                  (msg.streaming ? '<span class="streaming-cursor">▍</span>' : '');
     body.innerHTML = html;
     enhanceCodeBlocks(body);
+    // Agent-mode sub-agent chips render ABOVE the prose so the user sees
+    // the execution trace first, then the final summary. Rendered as
+    // native <details> so each one is click-to-expand for more detail.
+    if (msg.role === 'assistant' && Array.isArray(msg.agentChips) && msg.agentChips.length) {
+      const tray = buildAgentChipsTray(msg.agentChips);
+      body.insertBefore(tray, body.firstChild);
+    }
     if (msg.role === 'assistant' && Array.isArray(msg.edits) && msg.edits.length) {
       const tray = document.createElement('div');
       tray.className = 'edit-cards';
       for (const edit of msg.edits) tray.appendChild(buildEditCard(msg, edit));
       body.appendChild(tray);
     }
+  }
+
+  // ----------------------------------------------- Agent sub-agent chips
+  // One <details> per chip. Expanding shows the brief (for dispatches)
+  // or the full todo list (for plan chips). Because we squelch sub-agent
+  // tokens in v1, the expanded body is just the brief/summary — still
+  // better than a flat-text line because the user can collapse the
+  // trace to summaries-only once they've skimmed it.
+  function buildAgentChipsTray(chips) {
+    const tray = document.createElement('div');
+    tray.className = 'agent-chips';
+    for (const c of chips) {
+      const el = document.createElement('details');
+      el.className = 'agent-chip agent-chip-' + c.kind
+        + (c.status ? ' agent-chip-' + c.status : '');
+      const summary = document.createElement('summary');
+      if (c.kind === 'plan') {
+        summary.innerHTML =
+          `<span class="agent-chip-icon" aria-hidden="true">📋</span>` +
+          `<span class="agent-chip-label"><strong>Plan</strong> ` +
+          `(${c.todos.length} item${c.todos.length === 1 ? '' : 's'})</span>`;
+        const list = document.createElement('ul');
+        list.className = 'agent-chip-todos';
+        for (const t of c.todos) {
+          const li = document.createElement('li');
+          li.className = 'agent-chip-todo status-' + (t.status || 'pending');
+          li.textContent =
+            (t.status === 'completed' ? '☑ ' :
+             t.status === 'in_progress' ? '▶ ' : '☐ ') + t.task;
+          list.appendChild(li);
+        }
+        el.appendChild(summary);
+        el.appendChild(list);
+      } else {
+        // subagent chip — dispatched or returned.
+        const icon = c.status === 'done' ? '✓' : '▶';
+        const label = c.status === 'done'
+          ? `<strong>${escapeHtml(c.subagent)}</strong> done`
+          : `<strong>${escapeHtml(c.subagent)}</strong> running`;
+        const snippet = c.status === 'done'
+          ? escapeHtml((c.summary || '').slice(0, 80))
+          : escapeHtml((c.brief || '').slice(0, 80));
+        summary.innerHTML =
+          `<span class="agent-chip-icon" aria-hidden="true">${icon}</span>` +
+          `<span class="agent-chip-label">${label}</span>` +
+          (snippet ? `<span class="agent-chip-snippet">— ${snippet}</span>` : '');
+        const body = document.createElement('div');
+        body.className = 'agent-chip-body';
+        if (c.brief) {
+          const b = document.createElement('div');
+          b.className = 'agent-chip-brief';
+          b.innerHTML = `<em>Brief:</em> ${escapeHtml(c.brief)}`;
+          body.appendChild(b);
+        }
+        if (c.summary) {
+          const s = document.createElement('div');
+          s.className = 'agent-chip-summary';
+          s.innerHTML = `<em>Summary:</em> ${escapeHtml(c.summary)}`;
+          body.appendChild(s);
+        }
+        el.appendChild(summary);
+        el.appendChild(body);
+      }
+      tray.appendChild(el);
+    }
+    return tray;
   }
 
   // ---------------------------------------------- Apply/Reject code-edit card
@@ -890,6 +963,12 @@
     rejectBtn.textContent = 'Reject';
     actions.appendChild(applyBtn);
     actions.appendChild(rejectBtn);
+    // Hide the Apply/Reject row when the card is already settled (agent mode
+    // auto-applies; retries render with their final status). Leaves the
+    // head's status pill as the only indicator, keeping the card slim.
+    if (edit.status === 'applied' || edit.status === 'rejected') {
+      actions.hidden = true;
+    }
     card.appendChild(actions);
 
     const setStatus = (s) => {
@@ -902,6 +981,9 @@
                        : '';
       applyBtn.disabled = s !== 'pending';
       rejectBtn.disabled = s !== 'pending';
+      // Hide the button row once the card is settled — the head's pill
+      // already communicates "Applied" / "Rejected".
+      actions.hidden = (s !== 'pending');
     };
     setStatus(edit.status || 'pending');
 
@@ -1134,7 +1216,10 @@
     }
 
     addMessage('user', displayText, { attachments: [...state.attachments] });
-    const assistant = addMessage('assistant', '', { streaming: true });
+    // Tag the assistant turn with the mode we dispatched under, so handleSSE
+    // can decide whether code_edit events auto-apply (agent) or surface
+    // Apply/Reject buttons (edit).
+    const assistant = addMessage('assistant', '', { streaming: true, mode: state.mode });
 
     // Build request body according to backend ChatRequest schema.
     const body = buildChatRequestBody(userText || displayText, slashCommand);
@@ -1383,36 +1468,62 @@
         updateMessage(msg);
         break;
       case 'tool_call': {
-        // Agent mode overloads `tool_call` for three cases:
-        //   - name="write_todos"  → planning update  (📋 Plan: N items)
-        //   - name="task"         → sub-agent dispatched (▶ code-writer: brief)
-        //   - name="task_return"  → sub-agent returned  (✓ summary)
-        // Anything else falls back to a generic chip so legacy tool-calls
-        // from the other modes keep rendering.
+        // Agent mode overloads `tool_call` for three cases; each renders
+        // as an interactive <details> chip in the `agentChips` tray above
+        // the markdown body. See `renderAgentChips`.
+        //
+        //   - name="write_todos"  → one planning chip with a todo list
+        //   - name="task"         → sub-agent dispatch (opens in "running")
+        //   - name="task_return"  → pairs with the last running dispatch;
+        //                           flips it to "done" and stores the summary
+        //
+        // Anything else falls back to a generic markdown line so legacy
+        // tool-calls from the other modes keep rendering.
+        msg.agentChips = Array.isArray(msg.agentChips) ? msg.agentChips : [];
         const args = ev.arguments || {};
-        let chip = '';
         if (ev.name === 'write_todos' && Array.isArray(args.todos)) {
-          const lines = args.todos
-            .map(t => `- [${t.status === 'completed' ? 'x' : ' '}] ${t.task}`)
-            .join('\n');
-          chip = `📋 **Plan** (${args.todos.length} item${args.todos.length === 1 ? '' : 's'}):\n${lines}`;
+          msg.agentChips.push({
+            id:    uuid(),
+            kind:  'plan',
+            todos: args.todos.map(t => ({
+              task: t.task || '',
+              status: t.status || 'pending',
+            })),
+          });
         } else if (ev.name === 'task' && args.subagent) {
-          const brief = args.brief ? ` — ${args.brief}` : '';
-          chip = `▶ **${args.subagent}** running${brief}`;
+          msg.agentChips.push({
+            id:       uuid(),
+            kind:     'subagent',
+            subagent: args.subagent,
+            brief:    args.brief || '',
+            summary:  null,
+            status:   'running',
+          });
         } else if (ev.name === 'task_return') {
-          const summary = args.summary || 'done';
-          chip = `✓ ${summary}`;
+          // Pair with the most recent still-running subagent chip.
+          for (let i = msg.agentChips.length - 1; i >= 0; i--) {
+            const c = msg.agentChips[i];
+            if (c.kind === 'subagent' && c.status === 'running') {
+              c.summary = args.summary || 'done';
+              c.status = 'done';
+              break;
+            }
+          }
         } else {
-          chip = `*(tool_call: ${ev.name}${ev.arguments ? ' ' + JSON.stringify(ev.arguments) : ''})*`;
+          // Unknown tool call — fall back to inline markdown so the user
+          // still sees *something*.
+          const inline = `*(tool_call: ${ev.name}${ev.arguments ? ' ' + JSON.stringify(ev.arguments) : ''})*`;
+          msg.content += (msg.content ? '\n\n' : '') + inline;
         }
-        msg.content += (msg.content ? '\n\n' : '') + chip;
         updateMessage(msg);
         break;
       }
       case 'code_edit': {
         // One inline Apply/Reject card per structured edit the backend
-        // emitted. Store on the assistant message so it re-renders through
+        // emitted (edit mode) OR an auto-applied card (agent mode).
+        // Store on the assistant message so it re-renders through
         // `updateMessage` and survives a later `retryFromMessage`.
+        msg.edits = Array.isArray(msg.edits) ? msg.edits : [];
         const edit = {
           edit_id:       ev.edit_id || uuid(),
           file_path:     ev.file_path || '',
@@ -1422,11 +1533,62 @@
           start_line:    ev.start_line ?? null,
           end_line:      ev.end_line ?? null,
           diff_unified:  ev.diff_unified || '',
-          status:        'pending',   // pending | applied | rejected
+          status:        'pending',
         };
-        msg.edits = Array.isArray(msg.edits) ? msg.edits : [];
-        msg.edits.push(edit);
+
+        // Dedup by file_path: agent runs can produce 2–3 edits for the
+        // same file (reviewer re-confirms code-writer's work, or
+        // code-writer emits the same file twice from multiple rounds).
+        // Replace the prior card in place with the latest content rather
+        // than stacking — the final proposed_code is what the user wants
+        // to apply, not the earlier drafts.
+        const prevIdx = edit.file_path
+          ? msg.edits.findIndex(e => e.file_path === edit.file_path && e.status === 'pending')
+          : -1;
+        if (prevIdx >= 0) {
+          edit.edit_id = msg.edits[prevIdx].edit_id;  // preserve stable id for the bridge
+          msg.edits[prevIdx] = edit;
+        } else {
+          msg.edits.push(edit);
+        }
+
         Bridge.emitIntervention('chat_edit', edit.edit_id, 'INTERVENTION_SHOWN');
+
+        // Agent mode auto-applies — the user opted into multi-agent codegen,
+        // they don't want to babysit Apply/Reject on every file the agents
+        // produced. Edit mode keeps the manual Apply/Reject flow.
+        if (msg.mode === 'agent') {
+          edit.status = 'applied';
+          // Fire-and-forget; the IDE handles conflicts / failures itself.
+          // We update the message first so the card renders in the
+          // applied state immediately, then kick off the bridge call.
+          updateMessage(msg);
+          Bridge.applyEdit({
+            edit_id:       edit.edit_id,
+            file_path:     edit.file_path,
+            original_code: edit.original_code,
+            proposed_code: edit.proposed_code,
+            explanation:   edit.explanation,
+            start_line:    edit.start_line,
+            end_line:      edit.end_line,
+            diff_unified:  edit.diff_unified,
+          }).then((res) => {
+            if (res && res.applied) {
+              Bridge.emitIntervention('chat_edit', edit.edit_id, 'INTERVENTION_ACCEPTED');
+            } else {
+              // Host refused the auto-apply — downgrade the card to pending
+              // so the user can retry manually.
+              edit.status = 'pending';
+              updateMessage(msg);
+            }
+          }).catch((err) => {
+            Bridge.log('auto-apply failed: ' + (err && err.message || err));
+            edit.status = 'pending';
+            updateMessage(msg);
+          });
+          break;
+        }
+
         updateMessage(msg);
         break;
       }

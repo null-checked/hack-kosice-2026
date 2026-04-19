@@ -39,6 +39,13 @@
       </span>
     </div>
     <div class="toolbar-center">
+      <label class="visually-hidden" for="mode-picker">Mode</label>
+      <select id="mode-picker" class="model-picker mode-picker" aria-label="Chat mode"
+              title="Ask = plain Q&amp;A · Edit = structured edits (~1 call) · Agent = multi-agent orchestrator (~20 calls)">
+        <option value="ask">Ask</option>
+        <option value="edit">Edit</option>
+        <option value="agent">Agent</option>
+      </select>
       <label class="visually-hidden" for="model-picker">Model</label>
       <select id="model-picker" class="model-picker" aria-label="Model"></select>
       <div id="attach-toggles" class="attach-toggles" aria-label="Auto-attach status"></div>
@@ -89,13 +96,6 @@
                   fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <label class="visually-hidden" for="mode-picker">Mode</label>
-        <select id="mode-picker" class="mode-picker" aria-label="Chat mode"
-                title="Ask = plain Q&amp;A · Edit = structured edits (~1 call) · Agent = multi-agent orchestrator (~20 calls)">
-          <option value="ask">Ask</option>
-          <option value="edit">Edit</option>
-          <option value="agent">Agent</option>
-        </select>
       </div>
       <div class="composer-actions-right">
         <button id="send-btn" type="submit" class="btn btn-primary" disabled>
