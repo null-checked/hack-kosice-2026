@@ -12,6 +12,15 @@ dependencies = [
     "httpx>=0.27",
     "websockets>=13",
     "python-dotenv>=1.0",
+    # LLM + multi-agent orchestration (added v0.4 — /code-chat(/stream) and
+    # full LangChain migration). Pins stay loose for the 0.3 / 0.5 pre-1.0
+    # lines but are tight enough to rule out breaking sub-package skew.
+    "openai>=1.54,<2.0",
+    "langchain-openai~=0.3",
+    "langchain-ollama~=0.3",
+    "langchain-community~=0.3",
+    "duckduckgo-search>=6.0",
+    "deepagents~=0.5.3",
 ]
 
 [dependency-groups]

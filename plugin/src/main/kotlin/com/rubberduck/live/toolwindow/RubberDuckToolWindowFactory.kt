@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.swing.BorderFactory
 import javax.swing.DefaultListModel
 import javax.swing.JButton
+import javax.swing.JCheckBox
 import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.JTextPane
@@ -89,6 +90,19 @@ object RubberDuckToolWindow {
     }
     private val sendButton = JButton("Send")
     private val clearButton = JButton("Clear")
+    // v0.4: opt-in to the multi-agent orchestrator path. When off the
+    // plugin hits the legacy single-shot /code-chat (safe, no filesystem
+    // side effects). When on the backend routes the request through the
+    // code-writer / test-writer / reviewer sub-agents and populates
+    // `edits` on the response. See backend/docs/PRIVACY_NOTES.md for the
+    // threat model the orchestrator mode relaxes.
+    private val allowEditsCheck = JCheckBox("Allow edits (orchestrator)", false).apply {
+        toolTipText =
+            "<html>When on, routes /code-chat through the multi-agent " +
+                "orchestrator.<br/>Sub-agents can read/write files under " +
+                "ORCHESTRATOR_WORK_DIR and run shell commands.<br/>" +
+                "See <tt>backend/docs/PRIVACY_NOTES.md</tt> for the accepted threat model.</html>"
+    }
     private val coachHintLabel = JBLabel(
         "<html><i>Ask me anything about your code.</i></html>",
     )
@@ -118,8 +132,13 @@ object RubberDuckToolWindow {
         buttonsRow.add(sendButton)
         buttonsRow.add(clearButton)
         inputRow.add(buttonsRow, BorderLayout.EAST)
+        // Toggle row — checkbox sits on its own line so the checkmark + label
+        // are clearly visible above the input field.
+        val toggleRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
+        toggleRow.add(allowEditsCheck)
         val bottomCol = JPanel(GridLayout(0, 1, 0, 2))
         bottomCol.add(coachHintLabel)
+        bottomCol.add(toggleRow)
         bottomCol.add(inputRow)
         chat.add(bottomCol, BorderLayout.SOUTH)
 
@@ -207,6 +226,7 @@ object RubberDuckToolWindow {
         inputField.isEnabled = false
         val snapshot = conversation.toList()
         val project = currentProject.get()
+        val allowEdits = allowEditsCheck.isSelected
 
         scope.launch {
             val (currentCode, language, filePath) = captureActiveEditor(project)
@@ -217,13 +237,37 @@ object RubberDuckToolWindow {
                         current_code = currentCode,
                         file_path = filePath,
                         language = language,
+                        allow_edits = allowEdits,
                     ),
                 )
             }
             ApplicationManager.getApplication().invokeLater {
                 response
-                    .onSuccess {
-                        conversation.add(ChatTurn(role = "assistant", text = it.answer))
+                    .onSuccess { resp ->
+                        // Build a transcript entry that shows the prose AND any
+                        // orchestrator-produced edits. In orchestrator mode the
+                        // backend deliberately leaves `answer` blank and relies
+                        // on the streaming sibling's token drip for prose — so
+                        // the edits summary IS the primary signal here.
+                        val text = buildString {
+                            if (resp.answer.isNotBlank()) append(resp.answer)
+                            if (resp.edits.isNotEmpty()) {
+                                if (isNotEmpty()) append("\n\n")
+                                append("📝 Proposed edits (")
+                                    .append(resp.edits.size)
+                                    .append("):\n")
+                                for (e in resp.edits) {
+                                    append("• ").append(e.file_path)
+                                    if (e.explanation.isNotBlank()) {
+                                        append(" — ").append(e.explanation)
+                                    }
+                                    append("\n")
+                                }
+                            }
+                        }.ifBlank { "(empty response)" }
+                        conversation.add(
+                            ChatTurn(role = "assistant", text = text, edits = resp.edits),
+                        )
                     }
                     .onFailure {
                         conversation.add(

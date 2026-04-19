@@ -18,6 +18,10 @@ class HealthResponse(BaseModel):
     llm_available: bool
     demo_mock: bool = False
     version: str = "0.2.0"
+    # True when the multi-agent orchestrator (/code-chat, /code-chat/stream)
+    # has been constructed at startup. False under DEMO_MOCK=1, or when no
+    # OpenAI-family provider is configured, or when ORCHESTRATOR_ENABLED=false.
+    orchestrator_available: bool = False
 
 
 class ContextFile(BaseModel):

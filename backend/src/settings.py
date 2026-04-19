@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     # Ring buffer size per session.
     EVENT_BUFFER_SIZE: int = 500
 
+    # ---- Orchestrator / multi-agent (v0.4) ----
+    # Applies ONLY to POST /code-chat and POST /code-chat/stream. The five
+    # other LLM endpoints are not affected by these flags.
+    #
+    # WARNING: when the orchestrator is enabled AND a live LLM is configured,
+    # sub-agents get unrestricted filesystem + shell + web-search access. See
+    # `docs/PRIVACY_NOTES.md` for the deliberate CLAUDE.md relaxation.
+    ORCHESTRATOR_ENABLED: bool = True
+    # Optional override. When unset, sub-agents share the orchestrator model.
+    ORCHESTRATOR_SUBAGENT_MODEL: str | None = None
+    # Root directory `LocalShellBackend` operates in. `None` → process cwd.
+    ORCHESTRATOR_WORK_DIR: str | None = None
+    # Shell `execute` safety limits.
+    ORCHESTRATOR_SHELL_TIMEOUT: int = 120
+    ORCHESTRATOR_SHELL_MAX_OUTPUT_BYTES: int = 100_000
+    # DuckDuckGo internet search tool availability.
+    ORCHESTRATOR_WEB_SEARCH_ENABLED: bool = True
+
     @property
     def active_llm_model(self) -> str:
         """Return the model name used by the currently selected provider."""

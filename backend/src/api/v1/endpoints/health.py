@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from src.api.v1.deps import get_llm, get_settings
 from src.core.llm_client import BaseLLMClient
@@ -53,9 +53,12 @@ async def _probe_available(settings: Settings, llm: BaseLLMClient) -> bool:
 
 @router.get("/health", response_model=HealthResponse)
 async def health(
+    request: Request,
     settings: Settings = Depends(get_settings),
     llm: BaseLLMClient = Depends(get_llm),
 ) -> HealthResponse:
+    orchestrator_available = bool(getattr(request.app.state, "orchestrator", None))
+
     if settings.DEMO_MOCK:
         return HealthResponse(
             llm_provider=settings.LLM_PROVIDER,
@@ -63,6 +66,7 @@ async def health(
             llm_available=True,
             demo_mock=True,
             version=settings.APP_VERSION,
+            orchestrator_available=orchestrator_available,
         )
 
     key = _cache_key(settings)
@@ -80,4 +84,5 @@ async def health(
         llm_available=available,
         demo_mock=False,
         version=settings.APP_VERSION,
+        orchestrator_available=orchestrator_available,
     )
