@@ -12,6 +12,10 @@ import com.rubberduck.live.model.ExplainCodeResponse
 import com.rubberduck.live.model.GenerateTestsRequest
 import com.rubberduck.live.model.GenerateTestsResponse
 import com.rubberduck.live.model.HealthResponse
+import com.rubberduck.live.model.IndexBuildRequest
+import com.rubberduck.live.model.IndexBuildResponse
+import com.rubberduck.live.model.IndexSearchRequest
+import com.rubberduck.live.model.IndexSearchResponse
 import com.rubberduck.live.model.SocraticRequest
 import com.rubberduck.live.model.SocraticResponse
 import com.rubberduck.live.model.SuggestRefactorRequest
@@ -81,6 +85,16 @@ class BackendClient {
     @Throws(IOException::class)
     fun explainCode(req: ExplainCodeRequest): ExplainCodeResponse =
         post("/explain-code", JsonCodec.json.encodeToString(req), ExplainCodeResponse.serializer())
+
+    // ---------------------------------------------------------- Phase 2.1: /index/*
+
+    @Throws(IOException::class)
+    fun indexBuild(req: IndexBuildRequest): IndexBuildResponse =
+        post("/index/build", JsonCodec.json.encodeToString(req), IndexBuildResponse.serializer())
+
+    @Throws(IOException::class)
+    fun indexSearch(req: IndexSearchRequest): IndexSearchResponse =
+        post("/index/search", JsonCodec.json.encodeToString(req), IndexSearchResponse.serializer())
 
     private fun <T> post(
         path: String,

@@ -10,19 +10,14 @@ RubberDuck Live is a privacy-first, agentic IntelliJ plugin with a FastAPI backe
 |-----------------------------------|-----------------|-----------|----------|-------|----------------|
 | MCP Server Marketplace            | No              | Yes       | No       | No    | Innovation     |
 | Agent Manager (parallel sessions) | No              | Yes       | No       | No    | Technical Depth|
-| Autonomous CI/CD Mode             | No              | Yes       | No       | No    | Technical Depth|
 | Multi-model Routing               | Partial         | Yes       | No       | No    | Technical Depth|
-| Nix Flake/Reproducible Builds     | No              | Yes       | No       | No    | Polish         |
 | Changesets Versioning             | No              | Yes       | No       | No    | Polish         |
 | Custom Modes/Skills               | No              | Yes       | Yes      | No    | Innovation     |
 | Codebase Indexing (Vector DB)     | No              | No        | Yes      | Yes   | Technical Depth|
 | Semantic Code Search              | No              | No        | Yes      | Yes   | Technical Depth|
 | Task Orchestration/Subtasks       | No              | No        | Yes      | No    | Technical Depth|
 | Checkpoint System                 | No              | No        | Yes      | No    | Technical Depth|
-| RAG-based Code Completion         | No              | No        | No       | Yes   | Innovation     |
 | Repo Context/Commit History       | No              | No        | No       | Yes   | Technical Depth|
-| LDAP/SSO/GitHub Integration       | No              | No        | No       | Yes   | Polish         |
-| Self-hosted GPU Support           | No              | No        | No       | Yes   | Technical Depth|
 | MoSCoW Feature Breakdown          | Partial         | No        | No       | No    | Polish         |
 | Mermaid Architecture Diagrams     | Yes             | No        | No       | No    | Polish         |
 | Wellness META Layer               | Yes             | No        | No       | No    | Innovation     |
@@ -92,7 +87,6 @@ RubberDuck Live is a privacy-first, agentic IntelliJ plugin with a FastAPI backe
 
 | Proposal                  | Risk/Challenge                                      | Mitigation                                  |
 |--------------------------|-----------------------------------------------------|----------------------------------------------|
-| Session Replay           | Timeline UI complexity, event log parsing            | Start with MVP: only stuck/intervention events|
 | Plugin Skills System     | Plugin reloads, skill isolation                      | Use service loader pattern, clear API        |
 | Agent Manager Panel      | State isolation, UI complexity                       | Limit to 2-3 parallel sessions for demo      |
 | Semantic Codebase Index  | Indexing perf, LLM context window limits             | Index only open files or recent edits        |
@@ -100,8 +94,6 @@ RubberDuck Live is a privacy-first, agentic IntelliJ plugin with a FastAPI backe
 | Explain My Old Code      | Git blame API, LLM hallucination                     | Fallback to summary if blame fails           |
 | Anti-pattern Radar       | False positives, UI clutter                          | Show only top-N patterns, allow dismiss      |
 | Settings Search          | Settings API coverage                                | Index only visible settings for MVP          |
-| Unified .env Management  | Env sync across plugin/backend                       | Read-only MVP, surface in plugin UI          |
-| Mock Mode Toggle         | Demo/test divergence                                 | Keep mock responses up-to-date               |
 | Live Connection Badge    | WS reconnect edge cases                              | Use backend health endpoint, debounce UI     |
 
 ---
@@ -128,7 +120,6 @@ flowchart TD
 
 | Feature                   | Effort (relative) | Demo Impact |
 |---------------------------|-------------------|-------------|
-| Session Replay Panel      | Medium            | High        |
 | Plugin Skills System      | Medium            | High        |
 | Agent Manager Panel       | High              | Medium      |
 | Semantic Codebase Index   | High              | High        |
@@ -138,7 +129,6 @@ flowchart TD
 | Settings Search           | Low               | Medium      |
 | Unified .env Management   | Low               | Low         |
 | Animated Demo GIFs        | Low               | High        |
-| Mock Mode Toggle          | Low               | High        |
 | Live Connection Badge     | Low               | High        |
 
 ---
@@ -147,7 +137,6 @@ flowchart TD
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/JUDGING_CHEATSHEET.md`](docs/JUDGING_CHEATSHEET.md)
 - [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md)
-- [`TO_BE_REMOVED/feature_branch/prompt.md`](TO_BE_REMOVED/feature_branch/prompt.md)
 - Kilo Code, Roo Code, Tabby project docs
 
 ---

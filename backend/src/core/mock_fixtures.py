@@ -6,6 +6,13 @@ demo is guaranteed to work even if Ollama is unreachable.
 
 from __future__ import annotations
 
+import difflib
+import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.models.api import CodeChatRequest, CodeChatResponse
+
 # --- Pillar 1: Generate Tests for fizzbuzz ---
 FIZZBUZZ_TEST_CODE = '''import pytest
 from fizz import fizzbuzz
@@ -364,3 +371,130 @@ def pick_completion_mock(prefix: str) -> str:
         if tail.startswith(key):
             return value
     return MOCK_COMPLETION_DEFAULT
+
+
+# --- /code-chat edit-envelope mock ------------------------------------------
+# When `CodeChatRequest.allow_edits=True` and `DEMO_MOCK=1`, we still want a
+# structurally-correct `{answer, edits}` response — the Apply/Reject UI has
+# to exercise the envelope path even offline. The mock synthesises ONE edit
+# by renaming the first `foo` → `bar` occurrence in the current code (or
+# appending a marker comment if no `foo` is present). Keeps the golden-path
+# honest without depending on an actual LLM. When ``allow_edits`` is
+# false, we preserve the v0.3 behavior: prose answer, empty edits.
+
+_MOCK_EDIT_FALLBACK_ORIGINAL = "def foo():\n    return 1\n"
+
+
+def _mock_edit_pair(req: "CodeChatRequest") -> tuple[str, str, str, str]:
+    """Derive (file_path, original, proposed, explanation) for a mock edit.
+
+    Priority: request ``current_code`` → first ``context_files`` entry →
+    canonical fallback snippet. The rewrite is deterministic so tests and
+    demos stay reproducible.
+    """
+    if req.current_code.strip():
+        original = req.current_code
+        file_path = req.file_path or "demo/snippet.py"
+    elif req.context_files:
+        first = req.context_files[0]
+        original = first.content
+        file_path = first.path
+    else:
+        original = _MOCK_EDIT_FALLBACK_ORIGINAL
+        file_path = req.file_path or "demo/snippet.py"
+
+    if "foo" in original:
+        proposed = original.replace("foo", "bar", 1)
+        explanation = "Renamed the identifier `foo` to `bar` at the first occurrence."
+    else:
+        proposed = original.rstrip() + "\n# edited by mock_code_chat_response\n"
+        explanation = "Appended a trailing marker comment so the diff is non-empty."
+    return file_path, original, proposed, explanation
+
+
+def mock_code_chat_response(
+    req: "CodeChatRequest", prose_answer: str
+) -> "CodeChatResponse":
+    """Build the DEMO_MOCK=1 response for /code-chat.
+
+    - ``allow_edits=False``: preserve v0.3 behavior — plain prose, empty edits.
+    - ``allow_edits=True``: return one canned ``CodeEdit`` derived from the
+      request's ``current_code`` (or the first context file) with a real
+      server-computed unified diff. The prose answer describes the edit.
+    """
+    # Local import to avoid a circular module load (mock_fixtures is imported
+    # by code_chat, which imports models.api — pydantic is fast but we keep
+    # the top of this module stdlib-only at import time).
+    from src.models.api import CodeChatResponse, CodeEdit
+
+    if not req.allow_edits:
+        return CodeChatResponse(answer=prose_answer, model="mock")
+
+    file_path, original, proposed, explanation = _mock_edit_pair(req)
+    diff = "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            proposed.splitlines(keepends=True),
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+            n=3,
+        )
+    )
+    edit = CodeEdit(
+        file_path=file_path,
+        original_code=original,
+        proposed_code=proposed,
+        explanation=explanation,
+        start_line=1,
+        end_line=max(1, len(original.splitlines())),
+        diff_unified=diff,
+    )
+    answer = "Here's a canned edit for the DEMO_MOCK path. " + explanation
+    return CodeChatResponse(answer=answer, model="mock", edits=[edit])
+
+
+# --- /chat streaming edit-envelope mock -------------------------------------
+# The streaming /chat endpoint with `allow_edits=True` runs the MockLLMClient
+# in json_mode — which means the mock needs to produce a valid
+# `{"answer": "...", "edits": [...]}` JSON string that the envelope parser
+# can round-trip. This builder returns that JSON given the raw system+user
+# message list the mock already sees on its `last_messages` hook.
+
+_MOCK_STREAM_EDIT_ANSWER = (
+    "Here's a canned edit for the streaming DEMO_MOCK path. "
+    "Renamed the first identifier `foo` to `bar` so the diff is visibly non-empty."
+)
+
+
+def mock_stream_edit_envelope(
+    current_code: str,
+    file_path: str | None,
+) -> str:
+    """Return a JSON string that parses as `{answer, edits}`.
+
+    Used by tests and by any caller that wants to hand the MockLLMClient a
+    deterministic envelope when ``allow_edits=True``. The diff is server-
+    computed on the plugin side — we don't need to embed it here.
+    """
+    original = current_code if current_code.strip() else _MOCK_EDIT_FALLBACK_ORIGINAL
+    path = file_path or "demo/snippet.py"
+    if "foo" in original:
+        proposed = original.replace("foo", "bar", 1)
+        explanation = "Renamed the first `foo` to `bar`."
+    else:
+        proposed = original.rstrip() + "\n# edited by mock stream\n"
+        explanation = "Appended a marker comment so the diff is non-empty."
+    envelope = {
+        "answer": _MOCK_STREAM_EDIT_ANSWER,
+        "edits": [
+            {
+                "file_path": path,
+                "original_code": original,
+                "proposed_code": proposed,
+                "explanation": explanation,
+                "start_line": 1,
+                "end_line": max(1, len(original.splitlines())),
+            }
+        ],
+    }
+    return json.dumps(envelope)
