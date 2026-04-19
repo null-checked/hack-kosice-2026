@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.v1.router import api_v1_router
+from src.core.agents import build_orchestrator
 from src.core.llm_client import create_llm_client
 from src.settings import settings
 
@@ -48,8 +49,19 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("LLM probe failed: %s", exc)
 
+    # Build multi-agent orchestrator. Returns None when disabled/unavailable
+    # (DEMO_MOCK=1, no OpenAI key, wrong provider, or ORCHESTRATOR_ENABLED=false).
+    # The /code-chat endpoint checks for None at request time and falls back
+    # to the single-shot path, so the app boots cleanly either way.
+    try:
+        orchestrator = build_orchestrator(settings)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Orchestrator build failed: %s", exc)
+        orchestrator = None
+
     app.state.settings = settings
     app.state.llm_client = llm_client
+    app.state.orchestrator = orchestrator
     yield
     logger.info("Shutting down %s", settings.APP_NAME)
 

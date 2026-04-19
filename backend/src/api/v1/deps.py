@@ -16,6 +16,14 @@ def get_llm(request: Request) -> BaseLLMClient:
     return request.app.state.llm_client  # type: ignore[no-any-return]
 
 
+def get_orchestrator(request: Request):
+    """Return the compiled DeepAgent graph, or None when disabled.
+
+    Endpoints should tolerate None and fall back to the legacy path
+    rather than 503ing — the orchestrator is optional."""
+    return getattr(request.app.state, "orchestrator", None)
+
+
 async def require_optional_token(
     request: Request,
     x_rubberduck_token: str | None = Header(default=None, alias="X-RubberDuck-Token"),

@@ -15,3 +15,10 @@ os.environ.setdefault("DEMO_MOCK", "true")
 # circuits the actual network call so the provider choice is cosmetic here.
 os.environ.setdefault("LLM_PROVIDER", "openai")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-used-under-demo-mock")
+
+# Silence LangSmith: LangChain background callbacks otherwise try to phone
+# home to api.smith.langchain.com, which (a) we don't want and (b) will
+# timeout under pytest even in DEMO_MOCK mode when agents are constructed.
+os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
+os.environ.setdefault("LANGCHAIN_CALLBACKS_BACKGROUND", "false")
+os.environ.setdefault("LANGSMITH_TRACING", "false")

@@ -364,3 +364,114 @@ def pick_completion_mock(prefix: str) -> str:
         if tail.startswith(key):
             return value
     return MOCK_COMPLETION_DEFAULT
+
+
+# --- Orchestrator mock output ------------------------------------------------
+#
+# Used when `DEMO_MOCK=1` AND the caller hit /code-chat with `allow_edits=true`,
+# OR when they hit /code-chat/stream. Designed to demo the multi-agent shape
+# (three agents, two edits) without needing an LLM.
+
+FIZZBUZZ_FINAL = '''def fizzbuzz(n: int) -> str:
+    """Return the FizzBuzz string for integer n."""
+    if n % 15 == 0:
+        return "FizzBuzz"
+    if n % 3 == 0:
+        return "Fizz"
+    if n % 5 == 0:
+        return "Buzz"
+    return str(n)
+
+
+if __name__ == "__main__":
+    for i in range(1, 21):
+        print(fizzbuzz(i))
+'''
+
+FIZZBUZZ_TEST_FINAL = '''import pytest
+
+from fizzbuzz import fizzbuzz
+
+
+@pytest.mark.parametrize(
+    "n,expected",
+    [
+        (1, "1"),
+        (2, "2"),
+        (3, "Fizz"),
+        (5, "Buzz"),
+        (15, "FizzBuzz"),
+        (30, "FizzBuzz"),
+        (0, "FizzBuzz"),
+        (-3, "Fizz"),
+    ],
+)
+def test_fizzbuzz(n: int, expected: str) -> None:
+    assert fizzbuzz(n) == expected
+'''
+
+
+def _edit(
+    *,
+    file_path: str,
+    original: str,
+    proposed: str,
+    explanation: str,
+) -> dict:
+    """Build a CodeEdit-shaped dict (with diff_unified pre-computed)."""
+    import difflib
+
+    diff = "".join(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            proposed.splitlines(keepends=True),
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+            n=3,
+        )
+    )
+    return {
+        "file_path": file_path,
+        "original_code": original,
+        "proposed_code": proposed,
+        "explanation": explanation,
+        "start_line": None,
+        "end_line": None,
+        "diff_unified": diff,
+    }
+
+
+# Two canonical edits: one from code-writer, one from test-writer. The
+# mock reviewer approves without a further edit. Each dict matches
+# `CodeEdit.model_dump()` shape so the DTO hydration is a straight
+# `CodeEdit(**d)` call.
+MOCK_CODE_EDITS: list[dict] = [
+    _edit(
+        file_path="fizzbuzz.py",
+        original="",
+        proposed=FIZZBUZZ_FINAL,
+        explanation="FizzBuzz implementation with classic modulo cascade.",
+    ),
+    _edit(
+        file_path="tests/test_fizzbuzz.py",
+        original="",
+        proposed=FIZZBUZZ_TEST_FINAL,
+        explanation="pytest parametrise covering happy path + 0 + negatives.",
+    ),
+]
+
+MOCK_ORCHESTRATOR_ANSWER = (
+    "Dispatched code-writer, test-writer, and reviewer. "
+    "code-writer produced `fizzbuzz.py` with the standard modulo-15 cascade. "
+    "test-writer added `tests/test_fizzbuzz.py` covering 0, negatives, and "
+    "the FizzBuzz/Fizz/Buzz branches. "
+    "Reviewer LGTM'd the pair — no refinement emitted."
+)
+
+
+def drip_tokens(text: str, chunk_size: int = 6) -> list[str]:
+    """Split `text` into `chunk_size`-char chunks suitable for SSE drip.
+
+    Used by /code-chat/stream's DEMO_MOCK path and by the legacy streaming
+    endpoints — any time we want to simulate 'LLM typing' without an LLM."""
+    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
