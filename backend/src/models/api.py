@@ -18,6 +18,11 @@ class HealthResponse(BaseModel):
     llm_available: bool
     demo_mock: bool = False
     version: str = "0.2.0"
+    # True when the DeepAgents orchestrator compiled successfully at
+    # startup — i.e. when `ORCHESTRATOR_ENABLED=true`, the provider is
+    # OpenAI-family, and an API key is set. When False, `/chat` with
+    # `mode="agent"` will return a 503-style error event.
+    orchestrator_available: bool = False
 
 
 class ContextFile(BaseModel):
@@ -285,15 +290,44 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     stream: bool = True
-    # When true, the server asks the LLM for a structured `{answer, edits}`
-    # envelope and emits a `code_edit` stream event for every edit. The
-    # client then renders Apply/Reject cards. Off by default so plain chat
-    # stays cheap.
+    # Chat execution mode. Clients set this via the Ask/Edit/Agent dropdown
+    # in the webui composer.
+    #
+    #   "ask"   — plain streaming chat. No edits extracted.
+    #   "edit"  — envelope mode: ONE LLM call, structured `{answer, edits}`
+    #             JSON, extracted edits emitted as `code_edit` events.
+    #             Fast/cheap. Best for one-line or single-file fixes.
+    #   "agent" — DeepAgents multi-agent orchestrator (code-writer →
+    #             test-writer → reviewer). Each sub-agent has filesystem +
+    #             shell tools; edits emitted inline as they're produced.
+    #             Expensive (~20 LLM calls, ~60s). Best for multi-file
+    #             scaffolds. Requires `ORCHESTRATOR_ENABLED=true` and an
+    #             OpenAI-family provider.
+    #
+    # Backwards-compat: when `mode` is omitted, legacy clients sending
+    # `allow_edits=true` are interpreted as `mode="edit"`; without either,
+    # `mode="ask"` is the default. When `mode` is explicit, it wins and
+    # `allow_edits` is ignored.
+    mode: Literal["ask", "edit", "agent"] | None = None
+    # Legacy field kept for backwards-compat with older clients that pre-date
+    # the `mode` dropdown. When `mode` is explicit this is ignored; see the
+    # comment on `mode` above for the fallback rules.
     allow_edits: bool = False
     # Files the client attached alongside the turn (typically via @-mention).
     # Mirrors the legacy /code-chat `context_files` field so both endpoints
     # can share the same parser + prompt branch.
     context_files: list[ContextFile] = Field(default_factory=list)
+
+    @property
+    def resolved_mode(self) -> Literal["ask", "edit", "agent"]:
+        """Resolve the effective execution mode.
+
+        When both `mode` and `allow_edits` are set, `mode` wins. Older
+        clients that send only `allow_edits=True` are treated as edit mode.
+        """
+        if self.mode is not None:
+            return self.mode
+        return "edit" if self.allow_edits else "ask"
 
 
 # ---- SSE event envelopes (server → client) ----

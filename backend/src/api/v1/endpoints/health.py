@@ -17,7 +17,9 @@ import time
 
 from fastapi import APIRouter, Depends
 
-from src.api.v1.deps import get_llm, get_settings
+from typing import Any
+
+from src.api.v1.deps import get_llm, get_orchestrator, get_settings
 from src.core.llm_client import BaseLLMClient
 from src.models.api import HealthResponse
 from src.settings import Settings
@@ -55,7 +57,16 @@ async def _probe_available(settings: Settings, llm: BaseLLMClient) -> bool:
 async def health(
     settings: Settings = Depends(get_settings),
     llm: BaseLLMClient = Depends(get_llm),
+    orchestrator: Any = Depends(get_orchestrator),
 ) -> HealthResponse:
+    # `orchestrator_available` is true iff `build_orchestrator(settings)`
+    # returned a non-None compiled graph at startup. That function returns
+    # None for DEMO_MOCK, ORCHESTRATOR_ENABLED=false, non-OpenAI providers,
+    # missing API key, or construction errors — so this flag is a reliable
+    # "/chat with mode='agent' will work" signal the plugin can toggle the
+    # Agent dropdown option against.
+    orchestrator_available = orchestrator is not None
+
     if settings.DEMO_MOCK:
         return HealthResponse(
             llm_provider=settings.LLM_PROVIDER,
@@ -63,6 +74,7 @@ async def health(
             llm_available=True,
             demo_mock=True,
             version=settings.APP_VERSION,
+            orchestrator_available=orchestrator_available,
         )
 
     key = _cache_key(settings)
@@ -80,4 +92,5 @@ async def health(
         llm_available=available,
         demo_mock=False,
         version=settings.APP_VERSION,
+        orchestrator_available=orchestrator_available,
     )

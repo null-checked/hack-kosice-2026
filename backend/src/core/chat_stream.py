@@ -48,6 +48,7 @@ from src.models.api import (
     ChatToolCallEvent,
     ChatUsageEvent,
 )
+from src.settings import settings as app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +202,103 @@ async def _iter_edits_envelope_events(
         yield {"type": "done", "finish_reason": "stop"}
 
 
+async def _iter_agent_events(
+    req: ChatRequest,
+    orchestrator: Any,
+) -> AsyncIterator[dict[str, Any]]:
+    """Agent-mode streaming path — drive the DeepAgents orchestrator.
+
+    When the orchestrator is unavailable (DEMO_MOCK → falls back to the
+    canned trace; else not built → emits error + done) we degrade
+    gracefully rather than 500ing mid-stream.
+
+    The upstream orchestrator emits edits inline via the `custom` stream-
+    mode channel (see `agents.tools.emit_edit`), so there's no end-of-
+    stream aggregation step here — the translator yields `code_edit`
+    dicts the moment `emit_edit` fires.
+    """
+    # Lazy imports — keeps the langchain/deepagents dependency graph off
+    # the hot path for ask/edit requests that don't need it.
+    from src.core.agents import (  # noqa: PLC0415
+        bind_edit_sink,
+        iter_demo_agent_trace,
+        orchestrator_event_stream_as_chat_events,
+        reset_edit_sink,
+    )
+    from src.core.agents.context import RubberDuckContext  # noqa: PLC0415
+    from src.core.prompts import build_orchestrator_user_message  # noqa: PLC0415
+
+    if app_settings.DEMO_MOCK:
+        # Under DEMO_MOCK we skip the live orchestrator entirely and yield
+        # a canned but realistic event sequence.
+        async for event in iter_demo_agent_trace():
+            yield event
+        return
+
+    if orchestrator is None:
+        yield {
+            "type": "error",
+            "message": (
+                "Agent mode unavailable: orchestrator not built. Set "
+                "ORCHESTRATOR_ENABLED=true with an OpenAI-family provider "
+                "and an API key, then restart."
+            ),
+        }
+        yield {"type": "done", "finish_reason": "error"}
+        return
+
+    # Build the orchestrator's starting state + context from the same
+    # ChatRequest fields the other two modes use. The orchestrator's
+    # system prompt is baked into the compiled graph (see
+    # `agents.orchestrator.build_orchestrator`); here we only compose the
+    # single user message summarising the conversation.
+    import os  # noqa: PLC0415
+
+    work_dir = app_settings.ORCHESTRATOR_WORK_DIR or os.getcwd()
+    user_msg = build_orchestrator_user_message(
+        messages=req.messages,
+        context=req.context,
+        context_files=req.context_files,
+        slash_command=req.slash_command,
+        skill_name=req.skill_name,
+        skill_body=req.skill_body,
+        work_dir=work_dir,
+    )
+    initial_state: dict[str, Any] = {
+        "messages": [{"role": "user", "content": user_msg}],
+    }
+    rd_context: RubberDuckContext = {
+        "language": (req.context.selection.language if req.context.selection else None) or "python",
+        "current_file_path": (req.context.selection.file_path if req.context.selection else None),
+        "current_code": (req.context.selection.code if req.context.selection else ""),
+        "context_files": [cf.model_dump() for cf in req.context_files],
+        "allow_edits": True,
+        "work_dir": work_dir,
+    }
+
+    # Bind a fresh EditSink for this request so any non-streaming collector
+    # (future /chat?stream=false + mode=agent callers) can read final edits
+    # out at the end. The sink is populated in parallel to the `custom`
+    # stream channel — see agents/tools.py::_emit_edit_impl.
+    sink: list[dict[str, Any]] = []
+    token = bind_edit_sink(sink)
+    try:
+        async for event in orchestrator_event_stream_as_chat_events(
+            orchestrator,
+            initial_state=initial_state,
+            context=rd_context,
+            settings=app_settings,
+        ):
+            yield event
+    finally:
+        reset_edit_sink(token)
+
+
 async def iter_chat_events(
     req: ChatRequest,
     llm: BaseLLMClient,
     skills_dir: Path | None = None,
+    orchestrator: Any | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the chat pipeline and yield raw event dicts.
 
@@ -212,8 +306,18 @@ async def iter_chat_events(
     collect events into a single response without having to parse SSE frames.
     Errors are caught and yielded as an `error` event; `done` is guaranteed
     to be the last event yielded.
+
+    Dispatch is driven by `ChatRequest.resolved_mode`:
+
+      - "ask"   → `_iter_plain_events`         (bare streaming, no edits)
+      - "edit"  → `_iter_edits_envelope_events` (single-call JSON envelope)
+      - "agent" → `_iter_agent_events`          (DeepAgents orchestrator)
     """
-    if req.allow_edits:
+    mode = req.resolved_mode
+    if mode == "agent":
+        async for event in _iter_agent_events(req, orchestrator):
+            yield event
+    elif mode == "edit":
         async for event in _iter_edits_envelope_events(req, llm, skills_dir):
             yield event
     else:
@@ -225,13 +329,16 @@ async def stream_chat(
     req: ChatRequest,
     llm: BaseLLMClient,
     skills_dir: Path | None = None,
+    orchestrator: Any | None = None,
 ) -> AsyncIterator[str]:
     """Yield SSE-formatted strings for the /api/v1/chat endpoint.
 
     Always terminates with `data: [DONE]\\n\\n` so the client can safely
     break its read loop on that literal.
     """
-    async for event in iter_chat_events(req, llm, skills_dir=skills_dir):
+    async for event in iter_chat_events(
+        req, llm, skills_dir=skills_dir, orchestrator=orchestrator
+    ):
         yield _format_sse(_event_to_json(event))
     yield "data: [DONE]\n\n"
 

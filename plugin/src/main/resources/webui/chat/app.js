@@ -109,10 +109,16 @@
     skillsCache:  [],
     attachOpenFiles:    false,
     attachDiagnostics:  false,
-    // When true, the next request sets `allow_edits=true` and the backend
-    // runs the JSON-envelope prompt; replies may include `code_edit` SSE
-    // events that render as inline Apply/Reject cards.
-    allowEdits:         false,
+    // Chat execution mode (wired to the Ask/Edit/Agent dropdown). Maps to
+    // `ChatRequest.mode` in the backend:
+    //   "ask"   — plain streaming chat (no edits extracted).
+    //   "edit"  — envelope mode: structured `{answer, edits}` JSON in ONE
+    //             LLM call; server emits `code_edit` events inline.
+    //   "agent" — DeepAgents multi-agent orchestrator; emits sub-agent
+    //             `tool_call` chips + one `code_edit` per finished file.
+    //             Requires `ORCHESTRATOR_ENABLED=true` + OpenAI-family
+    //             provider on the backend (see health.orchestrator_available).
+    mode:               'ask',
     // Phase 1.2: debounced fuzzy @-file search state. Keyed by the query
     // string currently being fetched so we can ignore responses that arrive
     // after the user has moved on.
@@ -150,7 +156,7 @@
     newChatBtn:      $('#new-chat-btn'),
     attachSelBtn:    $('#attach-selection-btn'),
     attachFileBtn:   $('#attach-file-btn'),
-    allowEditsBtn:   $('#allow-edits-btn'),
+    modePicker:      $('#mode-picker'),
     modelPicker:     $('#model-picker'),
     statusPill:      $('#status-pill'),
     slashMenu:       $('#slash-menu'),
@@ -328,13 +334,15 @@
       el.sessionRailToggle.addEventListener('click', () => toggleSessionRail());
     }
 
-    if (el.allowEditsBtn) {
-      el.allowEditsBtn.addEventListener('click', () => {
-        state.allowEdits = !state.allowEdits;
-        refreshAllowEditsBtn();
-        Bridge.log('allow_edits=' + state.allowEdits);
+    if (el.modePicker) {
+      el.modePicker.value = state.mode;
+      el.modePicker.addEventListener('change', (e) => {
+        const next = e.target.value;
+        if (next === 'ask' || next === 'edit' || next === 'agent') {
+          state.mode = next;
+          Bridge.log('mode=' + state.mode);
+        }
       });
-      refreshAllowEditsBtn();
     }
 
     el.attachSelBtn.addEventListener('click', attachSelection);
@@ -389,14 +397,8 @@
     el.sendBtn.disabled = !(v || state.attachments.length > 0);
   }
 
-  function refreshAllowEditsBtn() {
-    if (!el.allowEditsBtn) return;
-    el.allowEditsBtn.classList.toggle('is-on', state.allowEdits);
-    el.allowEditsBtn.setAttribute('aria-pressed', state.allowEdits ? 'true' : 'false');
-    el.allowEditsBtn.title = state.allowEdits
-      ? 'Inline code edits ON — assistant may propose Apply/Reject cards'
-      : 'Inline code edits OFF — assistant replies prose only';
-  }
+  // No helper needed anymore — the native <select> reflects state.mode
+  // and the change listener in wireEvents writes state.mode back.
 
   // --------------------------------------------------- Slash / Mention menu
   function updateSlashMenu() {
@@ -1293,6 +1295,9 @@
       }
     }
 
+    // `mode` is the primary dispatch signal; `allow_edits` is kept as a
+    // legacy mirror so the backend's `resolved_mode` fallback still matches
+    // when an older server sees `allow_edits=true` without `mode`.
     return {
       messages,
       context,
@@ -1301,7 +1306,8 @@
       skill_body: state.skillBody || null,
       model: state.model || null,
       stream: true,
-      allow_edits: !!state.allowEdits,
+      mode: state.mode,
+      allow_edits: state.mode === 'edit' || state.mode === 'agent',
       context_files,
     };
   }
@@ -1376,11 +1382,33 @@
           `> **Error:** ${ev.message || 'unknown error'}`;
         updateMessage(msg);
         break;
-      case 'tool_call':
-        msg.content += (msg.content ? '\n\n' : '') +
-          `*(tool_call: ${ev.name}${ev.arguments ? ' ' + JSON.stringify(ev.arguments) : ''})*`;
+      case 'tool_call': {
+        // Agent mode overloads `tool_call` for three cases:
+        //   - name="write_todos"  → planning update  (📋 Plan: N items)
+        //   - name="task"         → sub-agent dispatched (▶ code-writer: brief)
+        //   - name="task_return"  → sub-agent returned  (✓ summary)
+        // Anything else falls back to a generic chip so legacy tool-calls
+        // from the other modes keep rendering.
+        const args = ev.arguments || {};
+        let chip = '';
+        if (ev.name === 'write_todos' && Array.isArray(args.todos)) {
+          const lines = args.todos
+            .map(t => `- [${t.status === 'completed' ? 'x' : ' '}] ${t.task}`)
+            .join('\n');
+          chip = `📋 **Plan** (${args.todos.length} item${args.todos.length === 1 ? '' : 's'}):\n${lines}`;
+        } else if (ev.name === 'task' && args.subagent) {
+          const brief = args.brief ? ` — ${args.brief}` : '';
+          chip = `▶ **${args.subagent}** running${brief}`;
+        } else if (ev.name === 'task_return') {
+          const summary = args.summary || 'done';
+          chip = `✓ ${summary}`;
+        } else {
+          chip = `*(tool_call: ${ev.name}${ev.arguments ? ' ' + JSON.stringify(ev.arguments) : ''})*`;
+        }
+        msg.content += (msg.content ? '\n\n' : '') + chip;
         updateMessage(msg);
         break;
+      }
       case 'code_edit': {
         // One inline Apply/Reject card per structured edit the backend
         // emitted. Store on the assistant message so it re-renders through
@@ -1814,8 +1842,18 @@
             renderAttachToggles();
             return;
           case 'set-allow-edits':
-            state.allowEdits = Boolean(payload);
-            refreshAllowEditsBtn();
+            // Legacy bridge message — older IDE builds send Boolean
+            // payloads before the Ask/Edit/Agent dropdown existed.
+            // Translate into the new `mode` enum and reflect in the
+            // dropdown.
+            state.mode = Boolean(payload) ? 'edit' : 'ask';
+            if (el.modePicker) el.modePicker.value = state.mode;
+            return;
+          case 'set-mode':
+            if (payload === 'ask' || payload === 'edit' || payload === 'agent') {
+              state.mode = payload;
+              if (el.modePicker) el.modePicker.value = state.mode;
+            }
             return;
           case 'send':             return send(payload != null ? String(payload) : el.input.value);
           case 'insert-text':
@@ -1851,8 +1889,17 @@
       renderAttachToggles();
     },
     setAllowEdits: (v) => {
-      state.allowEdits = Boolean(v);
-      refreshAllowEditsBtn();
+      // Legacy shim kept so older IDE host code (pre-dropdown) can still
+      // flip the mode. Maps true → "edit", false → "ask". Prefer setMode
+      // for new callers.
+      state.mode = Boolean(v) ? 'edit' : 'ask';
+      if (el.modePicker) el.modePicker.value = state.mode;
+    },
+    setMode: (m) => {
+      if (m === 'ask' || m === 'edit' || m === 'agent') {
+        state.mode = m;
+        if (el.modePicker) el.modePicker.value = state.mode;
+      }
     },
     newChat,
     clearMessages,

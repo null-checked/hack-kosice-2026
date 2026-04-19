@@ -56,8 +56,21 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("LLM probe failed: %s", exc)
 
+    # Compile the DeepAgents orchestrator — may return None if disabled,
+    # DEMO_MOCK, no API key, or non-OpenAI provider. In all those cases
+    # /chat with mode="agent" degrades to an error frame rather than
+    # crashing the backend.
+    try:
+        from src.core.agents import build_orchestrator  # noqa: PLC0415
+
+        orchestrator = build_orchestrator(settings)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Orchestrator build failed: %s", exc)
+        orchestrator = None
+
     app.state.settings = settings
     app.state.llm_client = llm_client
+    app.state.orchestrator = orchestrator
     yield
     logger.info("Shutting down %s", settings.APP_NAME)
 

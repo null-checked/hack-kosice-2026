@@ -12,6 +12,15 @@ dependencies = [
     "httpx>=0.27",
     "websockets>=13",
     "python-dotenv>=1.0",
+    # ---- Multi-agent orchestrator (used only by /chat with mode="agent") ----
+    # deepagents provides the hierarchical agent graph scaffolding; langchain-
+    # openai is the ChatOpenAI client the orchestrator + sub-agents share;
+    # langchain-community + ddgs supply the DuckDuckGo internet_search tool
+    # (stripped when ORCHESTRATOR_WEB_SEARCH_ENABLED=false).
+    "deepagents~=0.5.3",
+    "langchain-openai~=0.3",
+    "langchain-community~=0.3",
+    "ddgs>=9.0",
 ]
 
 [dependency-groups]

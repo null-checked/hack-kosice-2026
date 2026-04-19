@@ -89,12 +89,13 @@
                   fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button id="allow-edits-btn" type="button" class="btn btn-ghost allow-edits-btn"
-                role="switch" aria-pressed="false"
-                title="Allow inline code edits (Apply/Reject)">
-          <span class="allow-edits-dot" aria-hidden="true"></span>
-          <span class="allow-edits-label">Edits</span>
-        </button>
+        <label class="visually-hidden" for="mode-picker">Mode</label>
+        <select id="mode-picker" class="mode-picker" aria-label="Chat mode"
+                title="Ask = plain Q&amp;A · Edit = structured edits (~1 call) · Agent = multi-agent orchestrator (~20 calls)">
+          <option value="ask">Ask</option>
+          <option value="edit">Edit</option>
+          <option value="agent">Agent</option>
+        </select>
       </div>
       <div class="composer-actions-right">
         <button id="send-btn" type="submit" class="btn btn-primary" disabled>

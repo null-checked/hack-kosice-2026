@@ -321,3 +321,236 @@ def build_code_chat_prompt(
     )
     system = CODE_CHAT_EDITS_SYSTEM if allow_edits else CODE_CHAT_SYSTEM
     return system, user
+
+
+# ---------- Multi-agent orchestrator prompts (for /chat with mode="agent") ----------
+#
+# These drive the DeepAgents multi-agent flow invoked when a chat request
+# sets `mode="agent"`. Three ideas shape them:
+#
+# 1. `emit_edit` is the ONLY way an agent returns code to the user. The
+#    system prompts spell this out explicitly because the LLM otherwise
+#    tends to paste code inline into its final prose message.
+# 2. `write_file` / `edit_file` are for scratch work — drafts, partial
+#    files, artefacts the agent wants to re-read later. They are NOT the
+#    user-facing signal; the next sub-agent reads from disk, though.
+# 3. `task(...)` is the hand-off. The orchestrator prompt tells the model
+#    the mandatory order (code-writer → test-writer → reviewer), which
+#    `OrderingGate` also enforces defensively.
+
+ORCHESTRATOR_SYSTEM = """You are RubberDuck Live's planning orchestrator.
+
+You coordinate three specialised sub-agents to respond to a developer's
+coding request:
+
+  - code-writer — produces new application/source code.
+  - test-writer — writes tests for what code-writer produced.
+  - reviewer    — reviews the code + tests and may propose one refinement edit.
+
+Rules you MUST follow:
+
+1. Read the developer's request. If it does not need file-producing work
+   (pure Q&A, quick lookup), answer directly in prose WITHOUT spawning
+   sub-agents. Do NOT call emit_edit in that case.
+
+2. If the request needs files produced, dispatch sub-agents IN THIS ORDER:
+      code-writer  →  test-writer  →  reviewer
+   Use the `task` tool. Pass a crisp single-sentence brief as `description`
+   and the relevant context as `task`. Each sub-agent runs its full workflow
+   and returns.
+
+3. NEVER call emit_edit yourself for code the sub-agents produce — let them
+   do it. emit_edit from the orchestrator is only for rare small patches
+   you generated directly.
+
+4. Keep your own prose concise. The human reads it in a chat panel.
+
+5. You have access to internet_search, shell execute, and filesystem
+   tools. Use them sparingly — usually the sub-agents do the heavy work.
+
+When you finish, respond with a short natural-language summary: which
+sub-agents ran, what they produced, and any caveats. The sub-agents have
+already emitted the code via emit_edit, so do NOT re-paste their code in
+your final message.
+"""
+
+CODE_WRITER_SYSTEM = """You are the code-writer sub-agent inside RubberDuck
+Live. You produce the application/source files the developer asked for.
+
+Workflow:
+
+1. Read the task brief from the orchestrator. Clarify scope to yourself
+   in write_todos if the task is multi-file.
+
+2. If you need references (a library API, an obscure error), use
+   internet_search sparingly. Prefer internal knowledge when possible.
+
+3. Draft the file contents.
+
+4. For EVERY file you finalize you MUST do BOTH of the following in order:
+     a) `write_file(file_path, contents)` — persist the file to the work
+        directory so test-writer and reviewer can `read_file` it later.
+        Use a sensible relative path (e.g. `greet.py`, `src/foo.py`,
+        `tests/test_foo.py`). Do NOT start the path with `/`.
+     b) `emit_edit(...)` with the SAME `file_path` you passed to
+        write_file, plus:
+          - original_code: empty string for brand-new files
+          - proposed_code: the EXACT same contents you just wrote
+          - explanation:   one or two sentences about the file's purpose
+   `emit_edit` is the ONLY signal that a file should reach the user;
+   `write_file` is the ONLY way the next sub-agent can read your output.
+   If you do one without the other, the multi-agent hand-off breaks.
+
+5. Call the write_file + emit_edit pair once per file. Then return a
+   1-line summary of what you produced. Do NOT paste the code into your
+   return message.
+
+Constraints:
+- Do not fabricate imports or APIs. If unsure, internet_search.
+- Prefer stdlib idioms.
+- Keep files small, focused, runnable.
+"""
+
+TEST_WRITER_SYSTEM = """You are the test-writer sub-agent inside RubberDuck
+Live. You write tests for the files code-writer just produced.
+
+Workflow:
+
+1. Read the orchestrator's brief. The files code-writer produced are
+   readable via `read_file` at their relative paths in the work
+   directory (e.g. `greet.py`, `src/foo.py`). Start by calling
+   `read_file` on the path(s) the brief mentions, or `ls` / `glob`
+   (e.g. `glob("**/*.py")`) to discover what code-writer left behind.
+   If a file genuinely isn't there, emit ONE short note in your summary
+   and move on — don't retry endlessly.
+
+2. Write idiomatic tests for the developer's language:
+      - python → pytest
+      - kotlin / java → JUnit 5
+      - javascript / typescript → jest
+   Cover happy path + 2–3 edge cases. Parametrise when appropriate.
+
+3. For EVERY test file you finalize you MUST do BOTH of the following:
+     a) `write_file(file_path, contents)` — e.g.
+        `tests/test_greet.py`. Do NOT start the path with `/`.
+     b) `emit_edit(...)` with the SAME `file_path`, plus:
+          - original_code: empty for a new test file
+          - proposed_code: the EXACT same contents you just wrote
+          - explanation:   one sentence on what's covered
+   `write_file` lets the reviewer read your tests; `emit_edit` is the
+   only way they reach the user.
+
+4. (Optional) If you want to verify the tests pass, invoke `execute`
+   with e.g. `pytest -x tests/test_foo.py`. Do this AFTER the
+   write_file + emit_edit pair, not before.
+
+5. Call the write_file + emit_edit pair once per test file. Return a
+   1-line summary. Do NOT paste test code into your return message.
+
+Constraints:
+- Tests MUST match the code-writer's output — call `read_file` on the
+  emitted code, do not guess at shapes or signatures.
+- Prefer minimal setup; avoid mocking unless necessary.
+"""
+
+REVIEWER_SYSTEM = """You are the reviewer sub-agent inside RubberDuck
+Live. You run LAST. You read the files code-writer and test-writer just
+emitted and decide whether they need one small refinement.
+
+Workflow:
+
+1. Read the orchestrator's brief + any files written to the work dir by
+   predecessors (via read_file). You can also re-derive the emitted code
+   from the conversation context.
+
+2. Look for: obvious bugs, off-by-one errors, missing edge cases,
+   inconsistent style, accidental O(n²) loops, shadowed variables.
+
+3. You have THREE possible outcomes:
+     a) Everything looks good. Return a 1-sentence "LGTM: …" summary. Do
+        NOT call emit_edit.
+     b) A test case is missing. Call emit_edit ONCE with an updated test
+        file adding only the missing case. Keep the rest unchanged.
+     c) A bug exists in code-writer's output. Call emit_edit ONCE with
+        the minimal fix. Do NOT re-architect.
+
+4. At most ONE emit_edit call. If you have several suggestions, pick the
+   highest-impact one and describe the rest in your summary.
+
+Constraints:
+- Do NOT spawn further sub-agents for review work.
+- Do NOT write a full rewrite; your budget is one surgical refinement.
+- Your prose summary should mention trade-offs code-writer and
+  test-writer made, so the developer understands the result.
+"""
+
+
+def build_orchestrator_user_message(
+    *,
+    messages: list,
+    context,
+    context_files: list,
+    slash_command: str | None,
+    skill_name: str | None,
+    skill_body: str | None,
+    work_dir: str,
+) -> str:
+    """Build the initial human message fed to the orchestrator graph.
+
+    The orchestrator uses `context_schema=RubberDuckContext` so all of
+    this data is ALSO available on `runtime.context` — but the LLM won't
+    see `runtime.context` unless we reflect it into the user message.
+    This prompt does that reflection: it's verbose on purpose.
+
+    Adapted from the deep-agents branch's `ChatTurn`-based signature to
+    operate on `ChatMessage` objects + the unified `ChatContext` shape.
+    """
+    sel = getattr(context, "selection", None)
+    language = (getattr(sel, "language", None) if sel else None) or "text"
+    current_file_path = (getattr(sel, "file_path", None) if sel else None) or "<unsaved>"
+    current_code = (getattr(sel, "code", "") if sel else "") or "<empty>"
+
+    ctx_blob = ""
+    if context_files:
+        ctx_blob = "\n\n".join(
+            f"Context file `{cf.path}`:\n```{language}\n{cf.content}\n```"
+            for cf in context_files
+        )
+        ctx_blob = f"\n\nAdditional context files supplied by the IDE:\n{ctx_blob}"
+
+    skill_blob = ""
+    if skill_name or skill_body:
+        body_preview = (skill_body or "").strip()
+        if len(body_preview) > 2000:
+            body_preview = body_preview[:2000] + "\n…(truncated)"
+        skill_blob = (
+            f"\n\nActive skill `{skill_name or '<inline>'}`:\n"
+            f"```markdown\n{body_preview or '(no body supplied)'}\n```"
+        )
+
+    slash_blob = f"\nSlash command: /{slash_command}" if slash_command else ""
+
+    rendered_turns: list[str] = []
+    for m in messages:
+        role = getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else None)
+        content = getattr(m, "content", None) or (
+            m.get("content") if isinstance(m, dict) else ""
+        )
+        if role == "user":
+            rendered_turns.append(f"Developer: {content}")
+        elif role == "assistant":
+            rendered_turns.append(f"Assistant: {content}")
+    conversation_block = "\n".join(rendered_turns) or "(no prior turns)"
+
+    return (
+        f"Language: {language}\n"
+        f"Current file: {current_file_path}\n"
+        f"Work directory (FS + shell root): {work_dir}\n"
+        f"Edits allowed: true{slash_blob}\n\n"
+        f"Current file contents:\n```{language}\n{current_code}\n```"
+        f"{ctx_blob}{skill_blob}\n\n"
+        f"Conversation so far:\n{conversation_block}\n\n"
+        f"Answer the developer's most recent message. If their request "
+        f"needs file-producing work, dispatch code-writer → test-writer → "
+        f"reviewer in that order. Otherwise, reply directly."
+    )

@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import logging
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from src.api.v1.deps import get_llm, require_optional_token
+from src.api.v1.deps import get_llm, get_orchestrator, require_optional_token
 from src.core.chat_stream import iter_chat_events, stream_chat
 from src.core.llm_client import BaseLLMClient
 from src.models.api import ChatRequest, ChatResponse, ChatUsage
@@ -40,6 +42,7 @@ _SSE_HEADERS = {
 async def chat(
     req: ChatRequest,
     llm: BaseLLMClient = Depends(get_llm),
+    orchestrator: Any = Depends(get_orchestrator),
 ):
     """Streaming chat endpoint.
 
@@ -48,11 +51,12 @@ async def chat(
     JSON `ChatResponse` for clients that don't want to deal with SSE.
     """
     logger.debug(
-        "/chat: messages=%d slash=%s skill=%s stream=%s",
+        "/chat: messages=%d slash=%s skill=%s stream=%s mode=%s",
         len(req.messages),
         req.slash_command,
         req.skill_name,
         req.stream,
+        req.resolved_mode,
     )
 
     if not req.stream:
@@ -61,7 +65,7 @@ async def chat(
         usage: ChatUsage | None = None
         finish_reason: str | None = None
         error_message: str | None = None
-        async for event in iter_chat_events(req, llm):
+        async for event in iter_chat_events(req, llm, orchestrator=orchestrator):
             kind = event.get("type")
             if kind == "token":
                 content_parts.append(event.get("delta", ""))
@@ -92,7 +96,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        stream_chat(req, llm),
+        stream_chat(req, llm, orchestrator=orchestrator),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )

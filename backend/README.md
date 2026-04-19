@@ -12,11 +12,36 @@ See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for the full contract.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET  /api/v1/health`             | Liveness + LLM probe (2 s timeout) |
+| `GET  /api/v1/health`             | Liveness + LLM probe + `orchestrator_available` |
+| `POST /api/v1/chat`               | Unified streaming chat (SSE) — three modes; see below |
 | `POST /api/v1/generate-tests`     | LLM-generated unit tests (pytest / JUnit5 / Jest) |
 | `POST /api/v1/suggest-refactor`   | Heuristic smell detection + LLM rewrite + unified diff |
 | `POST /api/v1/socratic-question`  | One Socratic question, ≤ 25 words |
 | `WS   /api/v1/events`             | Plugin pushes events; dashboards subscribe to the stream |
+
+### `/chat` modes
+
+The primary chat endpoint branches on `ChatRequest.mode`:
+
+| `mode`  | Path taken                                    | Cost          | Best for                                        |
+| ------- | --------------------------------------------- | ------------- | ----------------------------------------------- |
+| `ask`   | Plain streaming chat — tokens forwarded raw.  | 1 LLM call    | Q&A, explanations, "what does this do?"         |
+| `edit`  | Envelope mode — LLM returns `{answer,edits}` JSON; server parses + emits `code_edit` events. | 1 LLM call    | Single-file or one-line fixes, quick refactors. |
+| `agent` | **DeepAgents orchestrator** — code-writer → test-writer → reviewer chain, each with filesystem + shell tools. Edits emit inline. | ~20 LLM calls | Multi-file scaffolds, generate-code-with-tests. |
+
+When `mode` is omitted, legacy clients sending `allow_edits=true` are
+interpreted as `mode="edit"`; otherwise `mode="ask"`.
+
+### ⚠️ Relaxed privacy posture on `/chat` with `mode="agent"`
+
+Agent mode deliberately relaxes four of the root `CLAUDE.md` privacy
+invariants. In plain English: when you POST to `/chat` with `mode="agent"`
+against a live LLM, the backend gains a local RCE surface — sub-agents
+read/write arbitrary files under `ORCHESTRATOR_WORK_DIR`, shell out freely,
+and search DuckDuckGo. Read
+[`docs/PRIVACY_NOTES.md`](docs/PRIVACY_NOTES.md) before enabling this on a
+machine you care about. Disable with `ORCHESTRATOR_ENABLED=false` (ask/edit
+modes still work).
 
 ## Install
 

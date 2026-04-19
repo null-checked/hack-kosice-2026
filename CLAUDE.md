@@ -104,6 +104,7 @@ For Makefile-driven runs: `make dev-live` uses the configured default (OpenAI); 
 - **Loopback only** — backend binds `127.0.0.1`; CORS allows only `http://localhost:3000` and `http://127.0.0.1:3000`. Don't widen this without a user-facing consent flow.
 - **Strict privacy mode** — `RubberDuckSettings.strictPrivacy` disables outbound code-sending actions. Any new action that sends code must check this flag.
 - **No telemetry** — no analytics SDKs, anywhere.
+- **Agent-mode exception** — `/api/v1/chat` with `mode="agent"` (selected via the Ask/Edit/Agent dropdown in the chat composer) deliberately relaxes all four of the above invariants (outbound DuckDuckGo search, unsandboxed filesystem + shell, un-redacted paths) so the multi-agent orchestrator can edit real files. Every other mode (`ask`, `edit`) and every other endpoint keeps the stricter posture. See [`backend/docs/PRIVACY_NOTES.md`](backend/docs/PRIVACY_NOTES.md) for the accepted threat model and the `ORCHESTRATOR_ENABLED=false` opt-out.
 
 ## Phase notes
 

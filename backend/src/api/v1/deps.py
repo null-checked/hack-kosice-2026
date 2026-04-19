@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import Header, HTTPException, Request, status
 
 from src.core.llm_client import BaseLLMClient
@@ -14,6 +16,15 @@ def get_settings(request: Request) -> Settings:
 
 def get_llm(request: Request) -> BaseLLMClient:
     return request.app.state.llm_client  # type: ignore[no-any-return]
+
+
+def get_orchestrator(request: Request) -> Any | None:
+    """Return the compiled DeepAgents orchestrator, or None if disabled.
+
+    The agent-mode dispatch in `chat_stream.py` handles a None return
+    gracefully by surfacing an error frame to the client.
+    """
+    return getattr(request.app.state, "orchestrator", None)
 
 
 async def require_optional_token(
