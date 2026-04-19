@@ -55,6 +55,18 @@
     loadSession:      async (id)     => (await call('loadSession', { id })),
     deleteSession:    async (id)     => (await call('deleteSession', { id })) ?? false,
     renameSession:    async (id, title) => (await call('renameSession', { id, title })) ?? false,
+    // ---- Phase 3 · Feature A: history search / favorite / export -----------
+    // `historySearch({query})` → `{sessions:[{id,title,snippet,updatedAt,favorite}]}`.
+    //   Empty query returns every session (favorites first, then newest).
+    // `historyToggleFavorite({id,favorite})` → `{ok,favorite}`.
+    // `historyExportMarkdown({id})` → `{markdown, filename}`.
+    // `fileSaveDialog({defaultName,content,extension})` → `{saved, path?}`
+    //   — pops a native save dialog; returns `{saved:false}` on cancel so
+    //   the UI can show a neutral toast without treating cancel as error.
+    historySearch:         async (query) => (await call('historySearch', { query: String(query || '') })) ?? { sessions: [] },
+    historyToggleFavorite: async (id, favorite) => (await call('historyToggleFavorite', { id, favorite: !!favorite })) ?? { ok: false },
+    historyExportMarkdown: async (id) => (await call('historyExportMarkdown', { id })) ?? null,
+    fileSaveDialog:        async (opts) => (await call('file_save_dialog', opts || {})) ?? { saved: false },
     onReady:          ()        => { try { HOST?.onReady && HOST.onReady(); } catch (_) {} },
     // ---- Phase 1.1: Apply/Reject inline code edits --------------------------
     // `applyEdit(payload)` asks the host to open an IDE-native diff preview
@@ -127,6 +139,16 @@
     sessionTitle:       null,
     sessions:           [],
     railCollapsed:      false,
+    // Phase 3 · Feature A — history search state. `sessionSearchQuery` is
+    // the raw input value; `sessionsView` is the array the rail currently
+    // renders (either unfiltered `sessions` or the search result). The
+    // snippet map lets us paint a 1-line excerpt under the title for each
+    // matched row without re-doing the substring scan.
+    sessionSearchQuery:  '',
+    sessionSearchTimer:  null,
+    sessionSearchToken:  0,
+    sessionsView:        [],
+    sessionSnippets:     {},
   };
 
   // -------------------------------------------------------- Slash commands
@@ -160,6 +182,7 @@
     sessionRailEmpty:$('#session-rail-empty'),
     sessionRailToggle: $('#session-rail-toggle'),
     sessionNewBtn:   $('#session-new-btn'),
+    sessionSearchInput: $('#session-rail-search-input'),
   };
 
   // ------------------------------------------------------------------ Utils
@@ -326,6 +349,32 @@
     }
     if (el.sessionRailToggle) {
       el.sessionRailToggle.addEventListener('click', () => toggleSessionRail());
+    }
+    if (el.sessionSearchInput) {
+      // Debounce 200ms so typing doesn't spam the bridge. Each keystroke
+      // schedules a fresh timer; the captured `myToken` guards against
+      // out-of-order responses landing and clobbering the latest query.
+      el.sessionSearchInput.addEventListener('input', (e) => {
+        const q = String(e.target.value || '');
+        state.sessionSearchQuery = q;
+        if (state.sessionSearchTimer) clearTimeout(state.sessionSearchTimer);
+        const myToken = ++state.sessionSearchToken;
+        state.sessionSearchTimer = setTimeout(async () => {
+          try {
+            const resp = await Bridge.historySearch(q);
+            if (myToken !== state.sessionSearchToken) return; // stale
+            const arr = Array.isArray(resp?.sessions) ? resp.sessions : [];
+            state.sessionsView = arr;
+            state.sessionSnippets = {};
+            for (const r of arr) {
+              if (r && r.id && r.snippet) state.sessionSnippets[r.id] = r.snippet;
+            }
+            renderSessionRail();
+          } catch (err) {
+            Bridge.log('historySearch failed: ' + (err && err.message || err));
+          }
+        }, 200);
+      });
     }
 
     if (el.allowEditsBtn) {
@@ -1496,14 +1545,39 @@
     renderSessionRail();
   }
 
-  /** Render `state.sessions` into the rail. Highlights the active row by
-   *  `state.sessionId`; shows an empty placeholder when no sessions exist. */
+  /**
+   * Render the session rail. Feature A additions:
+   *   - When `state.sessionSearchQuery` is non-empty we render the
+   *     search-result view (`state.sessionsView`) instead of the full list;
+   *     otherwise we sort the full list with favorites first.
+   *   - Each row paints a ★/☆ toggle (calls `historyToggleFavorite`) and
+   *     an export button (calls `historyExportMarkdown` + `fileSaveDialog`).
+   *   - Rows show the matching snippet under the title when searching.
+   */
   function renderSessionRail() {
     if (!el.sessionRailList) return;
-    const list = state.sessions || [];
+    const searching = !!(state.sessionSearchQuery && state.sessionSearchQuery.trim());
+    // When searching, the handler already returns a sorted view. When not,
+    // sort favorites-first ourselves so stars stay sticky at the top.
+    let list;
+    if (searching) {
+      list = state.sessionsView || [];
+    } else {
+      list = (state.sessions || []).slice().sort((a, b) => {
+        const fa = a && a.favorite ? 1 : 0;
+        const fb = b && b.favorite ? 1 : 0;
+        if (fa !== fb) return fb - fa;
+        return (b.updated_at || 0) - (a.updated_at || 0);
+      });
+    }
     el.sessionRailList.innerHTML = '';
     if (!list.length) {
-      if (el.sessionRailEmpty) el.sessionRailEmpty.hidden = false;
+      if (el.sessionRailEmpty) {
+        el.sessionRailEmpty.hidden = false;
+        el.sessionRailEmpty.textContent = searching
+          ? 'No chats match your search.'
+          : 'No saved chats yet. Send a message to start one.';
+      }
       return;
     }
     if (el.sessionRailEmpty) el.sessionRailEmpty.hidden = true;
@@ -1512,18 +1586,44 @@
       const id = s && s.id;
       if (!id) continue;
       const title = (s.title || '').trim() || 'Untitled session';
+      const favorite = !!s.favorite;
+      const snippet = searching ? (state.sessionSnippets[id] || '') : '';
+
       const item = document.createElement('div');
       item.className = 'session-item' + (id === state.sessionId ? ' is-active' : '');
       item.setAttribute('role', 'listitem');
       item.dataset.id = id;
       item.innerHTML =
-        `<span class="session-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>` +
+        `<button class="session-item-fav" type="button" aria-pressed="${favorite ? 'true' : 'false'}"` +
+          ` aria-label="${favorite ? 'Unfavorite session' : 'Favorite session'}"` +
+          ` title="${favorite ? 'Unfavorite' : 'Favorite'}">` +
+          `<span aria-hidden="true">${favorite ? '★' : '☆'}</span></button>` +
+        `<div class="session-item-body">` +
+          `<span class="session-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>` +
+          (snippet ? `<span class="session-item-snippet">${escapeHtml(snippet)}</span>` : '') +
+        `</div>` +
+        `<button class="session-item-export" type="button" aria-label="Export session as Markdown" title="Export as Markdown">` +
+          `<span aria-hidden="true">⤓</span></button>` +
         `<button class="session-item-menu" type="button" aria-label="Session actions" title="Rename / delete">…</button>`;
 
-      // Click anywhere except the overflow menu → load that session.
+      // Click anywhere except the action buttons → load that session.
       item.addEventListener('click', (e) => {
-        if (e.target.closest('.session-item-menu')) return;
+        if (e.target.closest('.session-item-menu') ||
+            e.target.closest('.session-item-fav') ||
+            e.target.closest('.session-item-export')) return;
         selectSession(id);
+      });
+      const favBtn = item.querySelector('.session-item-fav');
+      favBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSessionFavorite(id, !favorite);
+      });
+      const exportBtn = item.querySelector('.session-item-export');
+      exportBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        exportSessionAsMarkdown(id);
       });
       const menuBtn = item.querySelector('.session-item-menu');
       menuBtn.addEventListener('click', (e) => {
@@ -1532,6 +1632,65 @@
         openSessionMenu(item, id, title);
       });
       el.sessionRailList.appendChild(item);
+    }
+  }
+
+  /** Flip the ★ flag on a session and refresh the rail. Also updates the
+   *  in-memory `state.sessions` entry optimistically so the star paints
+   *  immediately, before the next full rail refresh. */
+  async function toggleSessionFavorite(id, favorite) {
+    try {
+      const resp = await Bridge.historyToggleFavorite(id, favorite);
+      if (!resp || resp.ok === false) {
+        Bridge.notify('Could not update favorite', 'error');
+        return;
+      }
+      // Optimistic local update — keeps the rail responsive even if a
+      // background listSessions hasn't landed yet.
+      const patch = (arr) => {
+        if (!Array.isArray(arr)) return;
+        for (const row of arr) {
+          if (row && row.id === id) row.favorite = !!resp.favorite;
+        }
+      };
+      patch(state.sessions);
+      patch(state.sessionsView);
+      renderSessionRail();
+      // Also re-run search so favorite-sort re-applies to the filtered view.
+      if (state.sessionSearchQuery && state.sessionSearchQuery.trim()) {
+        const r = await Bridge.historySearch(state.sessionSearchQuery);
+        state.sessionsView = Array.isArray(r?.sessions) ? r.sessions : [];
+        renderSessionRail();
+      } else {
+        // Non-search path: full refresh keeps disk + UI perfectly in sync.
+        refreshSessionRail();
+      }
+    } catch (err) {
+      Bridge.notify('Favorite failed: ' + (err && err.message || err), 'error');
+    }
+  }
+
+  /** Export a session to Markdown via the host and pop the save dialog.
+   *  Shows a neutral toast on cancel and an info toast on success. */
+  async function exportSessionAsMarkdown(id) {
+    try {
+      const resp = await Bridge.historyExportMarkdown(id);
+      if (!resp || !resp.markdown) {
+        Bridge.notify('Nothing to export', 'warn');
+        return;
+      }
+      const saved = await Bridge.fileSaveDialog({
+        defaultName: resp.filename || 'rubberduck-export.md',
+        content:     resp.markdown,
+        extension:   'md',
+      });
+      if (saved && saved.saved) {
+        Bridge.notify('Exported to ' + (saved.path || resp.filename), 'info');
+      } else {
+        Bridge.notify('Export cancelled', 'info');
+      }
+    } catch (err) {
+      Bridge.notify('Export failed: ' + (err && err.message || err), 'error');
     }
   }
 

@@ -5,11 +5,14 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -18,6 +21,9 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
@@ -107,11 +113,21 @@ class SessionStore(private val project: Project) {
         val messages = (session["messages"] as? JsonArray) ?: JsonArray(emptyList())
         val model = (session["model"] as? JsonPrimitive)?.content
 
+        // Phase 3 — carry-over of the `favorite` flag. New payloads may set
+        // it explicitly; otherwise we preserve whatever was on disk, which
+        // means toggling favorite and then saving a new turn does NOT
+        // silently flip it back to false. Missing-field on an old session
+        // file is the documented "migrate to false" path.
+        val favorite: Boolean = (session["favorite"] as? JsonPrimitive)?.booleanOrNull
+            ?: (existing?.get("favorite") as? JsonPrimitive)?.booleanOrNull
+            ?: false
+
         val full = buildJsonObject {
             put("id", id)
             put("title", title)
             put("created_at", createdAt)
             put("updated_at", now)
+            put("favorite", favorite)
             if (model != null) put("model", model)
             put("messages", messages)
         }
@@ -152,12 +168,17 @@ class SessionStore(private val project: Project) {
                     val updatedAt = (o["updated_at"] as? JsonPrimitive)?.longOrNull ?: createdAt
                     val msgs = (o["messages"] as? JsonArray)
                     val messageCount = msgs?.size ?: 0
+                    // Phase 3 — Feature A: expose `favorite` on every list row
+                    // so the rail can paint stars without a per-session load.
+                    // Missing field (old sessions) reads as `false`.
+                    val favorite = (o["favorite"] as? JsonPrimitive)?.booleanOrNull ?: false
                     val header = buildJsonObject {
                         put("id", id)
                         put("title", title)
                         put("created_at", createdAt)
                         put("updated_at", updatedAt)
                         put("message_count", messageCount)
+                        put("favorite", favorite)
                     }
                     summaries += updatedAt to header
                 }
@@ -199,6 +220,38 @@ class SessionStore(private val project: Project) {
             true
         } catch (t: Throwable) {
             log.warn("renameSession failed: ${t.message}")
+            false
+        }
+    }
+
+    /**
+     * Flip the `favorite` flag on an existing session. Returns `false`
+     * when the id is unsafe, missing on disk, or the write fails.
+     *
+     * Idempotent — setting the same value twice is a no-op (aside from
+     * the `updated_at` bump). Preserves `id`, `title`, `created_at`,
+     * `messages`, `model` verbatim; only `favorite` and `updated_at`
+     * change on disk.
+     *
+     * Treats a session file missing the `favorite` key as `favorite=false`
+     * (the documented migration behaviour) — the next write lands the
+     * field in place.
+     */
+    fun setFavorite(id: String, favorite: Boolean): Boolean {
+        val existing = load(id) ?: return false
+        val rewritten = buildJsonObject {
+            for ((k, v) in existing) {
+                if (k != "favorite" && k != "updated_at") put(k, v)
+            }
+            put("favorite", favorite)
+            put("updated_at", System.currentTimeMillis())
+        }
+        val dir = sessionsDir() ?: return false
+        return try {
+            writeAtomic(dir.resolve("$id.json"), JSON.encodeToString(JsonObject.serializer(), rewritten))
+            true
+        } catch (t: Throwable) {
+            log.warn("setFavorite failed: ${t.message}")
             false
         }
     }
