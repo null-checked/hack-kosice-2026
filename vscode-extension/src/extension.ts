@@ -63,8 +63,27 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('rubberduck.events', eventsView),
     vscode.window.registerTreeDataProvider('rubberduck.socratic', socraticView),
   );
-  registerChatWebviewProvider(context);
+  const chatProvider = registerChatWebviewProvider(context);
   registerDashboardViewProvider(context);
+
+  // 5a) Chat commands — thin shims over the provider's public methods.
+  //     They also double as keybinding targets and right-click menu entries
+  //     so the IDE feels identical to the IntelliJ plugin's Chat actions.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rubberduck.chat.open', async () => {
+      await vscode.commands.executeCommand('workbench.view.extension.rubberduck-live');
+      await vscode.commands.executeCommand('rubberduck.chat.focus');
+    }),
+    vscode.commands.registerCommand('rubberduck.chat.newChat',         () => chatProvider.newChat()),
+    vscode.commands.registerCommand('rubberduck.chat.focus',           () => chatProvider.focusInput()),
+    vscode.commands.registerCommand('rubberduck.chat.stop',            () => chatProvider.stopGeneration()),
+    vscode.commands.registerCommand('rubberduck.chat.clear',           () => chatProvider.clear()),
+    vscode.commands.registerCommand('rubberduck.chat.attachSelection', () => chatProvider.attachSelection()),
+    vscode.commands.registerCommand('rubberduck.chat.sendSelection',   async () => {
+      chatProvider.attachSelection();
+      chatProvider.sendMessage('/explain this');
+    }),
+  );
 
   // 6) Inline completion (ghost text).
   registerInlineCompletionProvider(context);

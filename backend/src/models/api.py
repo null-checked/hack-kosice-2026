@@ -197,3 +197,235 @@ class ErrorEnvelope(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     error: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/chat — streaming chat endpoint (Step 2 of the chat feature rollout).
+#
+# These models power the SSE-based chat protocol used by the IntelliJ plugin
+# and VS Code extension. They are INTENTIONALLY separate from the legacy
+# CodeChat* models above, which back the non-streaming /api/v1/code-chat
+# endpoint (kept for backwards compatibility).
+# ---------------------------------------------------------------------------
+
+
+class ChatMessage(BaseModel):
+    """A single message in a multi-turn chat conversation.
+
+    Uses the canonical OpenAI-ish vocabulary (system/user/assistant) so the
+    message list can be handed to any chat-completions-shaped LLM verbatim.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatSelection(BaseModel):
+    """The active editor selection the developer is asking about."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str | None = None
+    language: str | None = None
+    code: str
+
+
+class ChatAttachedFile(BaseModel):
+    """A file the client attached as additional context (e.g. via @-mention)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    content: str
+    language: str | None = None
+
+
+class ChatDiagnostic(BaseModel):
+    """An editor diagnostic (compiler error, linter warning, …) attached as context."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: str
+    line: int | None = None
+    severity: Literal["error", "warning", "info", "hint"] = "error"
+    message: str
+
+
+class ChatContext(BaseModel):
+    """Bundle of IDE context sent alongside the conversation turns.
+
+    Each field is optional; the context builder renders only the sections
+    that are actually populated.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    selection: ChatSelection | None = None
+    attached_files: list[ChatAttachedFile] = Field(default_factory=list)
+    diagnostics: list[ChatDiagnostic] = Field(default_factory=list)
+    open_files: list[str] = Field(default_factory=list)  # paths only, for awareness
+
+
+class ChatRequest(BaseModel):
+    """POST body for /api/v1/chat."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    messages: list[ChatMessage] = Field(default_factory=list)
+    context: ChatContext = Field(default_factory=ChatContext)
+    slash_command: Literal["explain", "tests", "refactor", "fix", "doc"] | None = None
+    # Skill name as declared in a .skills/<name>/SKILL.md frontmatter. For the
+    # hackathon the server doesn't try to resolve project-scoped skill files;
+    # the client sends the markdown body inline via `skill_body` instead.
+    skill_name: str | None = None
+    skill_body: str | None = None  # full SKILL.md body, overrides skill_name lookup
+    model: str | None = None  # override LLM_MODEL for this request
+    temperature: float | None = None
+    max_tokens: int | None = None
+    stream: bool = True
+    # When true, the server asks the LLM for a structured `{answer, edits}`
+    # envelope and emits a `code_edit` stream event for every edit. The
+    # client then renders Apply/Reject cards. Off by default so plain chat
+    # stays cheap.
+    allow_edits: bool = False
+    # Files the client attached alongside the turn (typically via @-mention).
+    # Mirrors the legacy /code-chat `context_files` field so both endpoints
+    # can share the same parser + prompt branch.
+    context_files: list[ContextFile] = Field(default_factory=list)
+
+
+# ---- SSE event envelopes (server → client) ----
+#
+# Each event is serialised as a JSON object and wrapped in one SSE frame:
+#     data: {"type":"token","delta":"..."}\n\n
+# A trailing `data: [DONE]\n\n` sentinel is emitted after the stream completes
+# so the client can close the reader without having to parse the final frame.
+
+
+class ChatTokenEvent(BaseModel):
+    type: Literal["token"] = "token"
+    delta: str
+
+
+class ChatToolCallEvent(BaseModel):
+    type: Literal["tool_call"] = "tool_call"
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatUsageEvent(BaseModel):
+    type: Literal["usage"] = "usage"
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ChatDoneEvent(BaseModel):
+    type: Literal["done"] = "done"
+    finish_reason: str | None = None
+
+
+class ChatErrorEvent(BaseModel):
+    type: Literal["error"] = "error"
+    message: str
+
+
+class ChatCodeEditEvent(BaseModel):
+    """A proposed code edit surfaced mid-stream when `allow_edits=True`.
+
+    The client renders an Apply/Reject card for each event. `diff_unified`
+    is always server-computed (via difflib) so the plugin doesn't have to
+    trust whatever the LLM wrote into the JSON envelope.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Literal["code_edit"] = "code_edit"
+    edit_id: str
+    file_path: str
+    original_code: str
+    proposed_code: str
+    explanation: str = ""
+    start_line: int | None = None
+    end_line: int | None = None
+    diff_unified: str = ""
+
+
+class ChatUsage(BaseModel):
+    """Token usage block for the non-streaming response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class ChatResponse(BaseModel):
+    """Non-streaming fallback response returned when `stream=False`."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    content: str
+    usage: ChatUsage | None = None
+    finish_reason: str | None = None
+    model: str = "unknown"
+
+
+# ======================================================================
+# Phase 2.1 — Semantic (BM25) code index DTOs.
+#
+# The plugin enumerates project-content files and POSTs them to
+# `/index/build`; the chat web UI later calls `/index/search` through the
+# `searchSemantic` bridge when the user types `@?<query>`. The backend
+# keeps the corpus in-process (rebuilt on restart) — no persistence,
+# no embeddings, no outbound network. Everything stays on loopback.
+# ======================================================================
+
+
+class IndexFile(BaseModel):
+    """A single file's contents, addressed by its redacted project-relative path."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    path: str
+    content: str
+
+
+class IndexBuildRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    files: list[IndexFile] = Field(default_factory=list)
+
+
+class IndexBuildResponse(BaseModel):
+    """Count of files the backend's indexer successfully ingested."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    indexed: int
+
+
+class IndexSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    query: str
+    k: int = Field(default=5, ge=1, le=50)
+
+
+class IndexHit(BaseModel):
+    """One ranked match from the index — path, BM25 score, and a short snippet."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    path: str
+    score: float = 0.0
+    snippet: str = ""
+
+
+class IndexSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    hits: list[IndexHit] = Field(default_factory=list)

@@ -46,3 +46,9 @@ file.py
 test_fizz.py
 # Claude Code local session state.
 .claude/
+
+# ---- RubberDuck runtime (project-local) ----
+# Per-project chat history (one JSON per session) written by SessionStore.
+.rubberduck/
+# Project-scoped skills autocopied from plugin resources on first run.
+.skills/

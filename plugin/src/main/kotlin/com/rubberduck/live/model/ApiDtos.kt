@@ -148,3 +148,42 @@ data class ExplainCodeResponse(
     val suggestions: List<String> = emptyList(),
     val model: String = "unknown",
 )
+
+// ----------------------------------------------------------------------
+// Phase 2.1 — Semantic (BM25) code index DTOs. Mirror
+// `backend/src/models/api.py`'s IndexFile / Request / Response shapes.
+// ----------------------------------------------------------------------
+
+@Serializable
+data class IndexFile(
+    val path: String,
+    val content: String,
+)
+
+@Serializable
+data class IndexBuildRequest(
+    val files: List<IndexFile> = emptyList(),
+)
+
+@Serializable
+data class IndexBuildResponse(
+    val indexed: Int = 0,
+)
+
+@Serializable
+data class IndexSearchRequest(
+    val query: String,
+    val k: Int = 5,
+)
+
+@Serializable
+data class IndexHit(
+    val path: String,
+    val score: Double = 0.0,
+    val snippet: String = "",
+)
+
+@Serializable
+data class IndexSearchResponse(
+    val hits: List<IndexHit> = emptyList(),
+)

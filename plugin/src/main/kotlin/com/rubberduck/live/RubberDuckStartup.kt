@@ -14,6 +14,7 @@ import com.rubberduck.live.listeners.FileFocusListener
 import com.rubberduck.live.listeners.InspectionListener
 import com.rubberduck.live.listeners.TestExecutionListener
 import com.rubberduck.live.net.EventsWebSocket
+import com.rubberduck.live.services.CodeIndexer
 import com.rubberduck.live.storage.EventLog
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -50,6 +51,11 @@ class RubberDuckStartup : ProjectActivity {
         CaretDwellTracker(project).install(projectDisposable)
         TestExecutionListener(project).install(projectDisposable)
         InspectionListener(project).install(projectDisposable)
+
+        // Phase 2.1 — kick off the semantic code index on a background
+        // thread. Strict-privacy users get a no-op inside the service.
+        runCatching { CodeIndexer.getInstance(project).onStartup() }
+            .onFailure { log.warn("CodeIndexer onStartup failed: ${it.message}") }
 
         log.info("RubberDuck Live listeners installed; session=${SessionContext.getInstance().sessionId}")
     }
