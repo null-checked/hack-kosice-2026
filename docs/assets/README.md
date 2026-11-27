@@ -1,25 +1,14 @@
 # 🦆 Visual Assets — current state & recording recipes
 
-> **Current state: polished SVG placeholders are in place.** The root
-> [`README.md`](../../README.md) renders a full visual story today:
-> [`hero.svg`](hero.svg), [`pillar1.svg`](pillar1.svg),
-> [`pillar2.svg`](pillar2.svg), [`pillar3.svg`](pillar3.svg). They look like
-> product screenshots but are hand-authored static mockups — judges see
-> something intentional, not broken image icons.
->
-> **To replace with real recordings**, follow the recipes below and save the
-> outputs with the **same base filenames** but `.gif`/`.png` extensions
-> (e.g. `hero.gif`, `pillar1.png`). Then update the `<img src="…">`
-> references in the root README from `.svg` back to `.gif`/`.png`. The SVG
-> placeholders can stay checked in as a fallback — they are tiny (< 30 KB
-> total) and never shipped to the final build.
-
-All asset files are **optional** at the build level — missing them just
-shows a broken image tag on the rendered README; nothing crashes.
+The root [`README.md`](../../README.md) uses [`banner.png`](banner.png)
+as the project banner and the three pillar SVGs as static mockups.
+Use the recipes below to record a separate demo montage or replace a
+pillar mockup with a screenshot.
 
 | File             | Purpose                                             | Current             | Target for recording |
 | ---------------- | --------------------------------------------------- | ------------------- | -------------------- |
-| `hero.svg`       | Brand hero with wordmark + live pulse dot           | ✅ placeholder live | `hero.gif` 20 s montage, 1600×1000 |
+| `banner.png`     | Project banner                                      | Used in the README   | — |
+| `hero.gif`       | Demo montage                                        | Recording planned   | 20 s, 1600×1000 |
 | `pillar1.svg`    | Generate Tests action + generated pytest file       | ✅ placeholder live | `pillar1.png` still, 1600×1000 |
 | `pillar2.svg`    | Suggest Refactor diff viewer with gutter tooltips   | ✅ placeholder live | `pillar2.png` still, 1600×1000 |
 | `pillar3.svg`    | Undo-burst balloon + dashboard split-screen         | ✅ placeholder live | `pillar3.png` still, 1600×1000 |
@@ -79,10 +68,3 @@ gifsicle -O3 --lossy=80 --colors 128 docs/assets/hero.gif -o docs/assets/hero.gi
 # PNG: shrink ~30 % losslessly
 pngquant --force --ext .png --quality=65-85 docs/assets/pillar*.png
 ```
-
-## Fallback behaviour
-
-The root README references these files with relative paths. If a file is
-missing, GitHub renders a broken-image icon — not a build failure. Safe to
-ship without the GIFs if time runs out; the `hero.svg` placeholder will
-keep the hero section looking intentional.

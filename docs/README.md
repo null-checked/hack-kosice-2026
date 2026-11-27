@@ -25,7 +25,7 @@ locked in the architecture doc, plus any known gaps for downstream phases.
 ## Visual assets
 
 - 🖼 [`assets/README.md`](assets/README.md) — recording recipes for `hero.gif`, `pillar1.png`, `pillar2.png`, `pillar3.png`.
-- 🖼 [`assets/hero.svg`](assets/hero.svg) — SVG placeholder used by the root README until the GIF is recorded.
+- 🖼 [`assets/banner.png`](assets/banner.png) — project banner used by the root README.
 
 ## Reading order
 
