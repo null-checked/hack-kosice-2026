@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero.svg" alt="RubberDuck Live — your IDE's pair programmer that watches you think" width="780">
+  <img src="docs/assets/banner.png" alt="RubberDuck Live, an AI pair programmer for IntelliJ" width="620">
 </p>
 
 <h1 align="center">🦆 RubberDuck Live</h1>
@@ -14,8 +14,6 @@
   <img alt="OpenAI" src="https://img.shields.io/badge/LLM-OpenAI%20gpt--4o--mini-10a37f?style=for-the-badge&logo=openai">
   <img alt="Local-fallback" src="https://img.shields.io/badge/Local%20fallback-Ollama%20qwen2.5--coder-22c55e?style=for-the-badge">
 </p>
-
-<!-- Hero SVG above is the current polished placeholder. A future `docs/assets/hero.gif` 20-second demo can replace it 1:1 once recorded — see docs/assets/README.md. -->
 
 ---
 
